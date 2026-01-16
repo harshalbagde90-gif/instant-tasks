@@ -1,0 +1,4 @@
+project_id = "ajizhkkpbzrvpcsqtqhr"
+
+[functions.task-ai]
+verify_jwt = false
