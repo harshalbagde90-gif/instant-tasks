@@ -3,6 +3,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
 serve(async (req) => {
@@ -11,11 +12,13 @@ serve(async (req) => {
   }
 
   try {
-    const { task, action } = await req.json();
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    const { task, action, language = 'English' } = await req.json();
+    console.log(`Action: ${action}, Language: ${language}, Task: ${task}`);
 
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
+    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+
+    if (!GEMINI_API_KEY) {
+      throw new Error("GEMINI_API_KEY is not configured");
     }
 
     let systemPrompt = "";
@@ -23,8 +26,37 @@ serve(async (req) => {
 
     switch (action) {
       case "improve":
-        systemPrompt = "You are a task improvement assistant. Rewrite the given task to be clearer, more actionable, and easier to understand. Keep it concise (under 15 words). Return only the improved task text, nothing else.";
-        userPrompt = `Improve this task: "${task}"`;
+        if (language === 'Hinglish') {
+          systemPrompt = `You are a Hinglish Grammar and Typo Expert. Your goal is to transform messy Hinglish into clean, natural-sounding mission statements.
+Rules:
+1. Fix word order: If words are jumbled, re-arrange them.
+2. Remove junk symbols: Remove '+', '>', '/', ';', '[', ']', '|' that don't belong.
+3. Fix common typos: 'klro' -> 'karo', 'wna' -> 'chahta hoon', 'bna' -> 'bana', 'sa' -> 'as soon as'.
+4. Preserve "Num guru".
+5. Return ONLY the corrected text.
+
+Examples:
+- "website bna rha hu main aaj" -> "Main aaj website bana raha hoon"
+- "mjhe kam klro h +>;" -> "Mujhe kaam karna hai"
+- "proprety project per kam" -> "Property project par kaam"`;
+        } else {
+          systemPrompt = `You are an English Grammar and Spelling Expert. You transform messy, jumbled task text into clean, professional mission statements.
+Rules:
+1. Fix obvious spelling and typos (e.g., 'proprety' -> 'property', 'wna' -> 'want to', 'sa' -> 'as soon as').
+2. Remove all unnecessary symbols (e.g., '[;', '+', '>', '/', '|') that disrupt the sentence.
+3. Un-jumble words: Re-arrange words to make logical sense.
+4. Capitalize the first letter and fix basic grammar.
+5. Preserve brand names like "Num guru".
+6. Return ONLY the final corrected text. NO QUOTES.
+
+Examples:
+- "com[;lete my proprety website as sona spossible" -> "Complete my property website as soon as possible"
+- "i wna to make the proprety website sa possible" -> "I want to make the property website as soon as possible"
+- "get groceries +> /; clean room" -> "Get groceries and clean the room"
+- "complete have to I project today" -> "I have to complete the project today"
+- "i m work per proprety website" -> "I am working on the property website"`;
+        }
+        userPrompt = `Refine this mission statement (${language}): "${task}"`;
         break;
       case "shorten":
         systemPrompt = "You are a task simplification assistant. Shorten the given task to its essential meaning while keeping it actionable. Maximum 8 words. Return only the shortened task text, nothing else.";
@@ -42,51 +74,49 @@ serve(async (req) => {
         throw new Error("Invalid action");
     }
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const modelName = "gemini-1.5-flash";
+    console.log(`Executing ${action} using model: ${modelName}`);
+
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${GEMINI_API_KEY}`, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
+        system_instruction: {
+          parts: [{ text: systemPrompt }]
+        },
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: userPrompt }],
+          },
         ],
+        generationConfig: {
+          temperature: 0.1, // Lower temperature for more accurate/consistent results
+          topK: 1,
+          topP: 1,
+          maxOutputTokens: 1024,
+        },
       }),
     });
 
     if (!response.ok) {
-      if (response.status === 429) {
-        return new Response(
-          JSON.stringify({ error: "Rate limit exceeded. Please try again in a moment." }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      if (response.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "AI usage limit reached. Please try again later." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
       const errorText = await response.text();
-      console.error("AI gateway error:", response.status, errorText);
-      throw new Error("AI gateway error");
+      console.error("Gemini API error:", response.status, errorText);
+      throw new Error(`Gemini API error: ${response.status}`);
     }
 
     const data = await response.json();
-    let result = data.choices?.[0]?.message?.content?.trim() || "";
+    let result = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
 
     // For breakdown action, parse the JSON array
     if (action === "breakdown") {
       try {
-        // Try to extract JSON array from the response
         const jsonMatch = result.match(/\[[\s\S]*\]/);
         if (jsonMatch) {
           result = JSON.parse(jsonMatch[0]);
         } else {
-          // Fallback: split by newlines or numbered items
           result = result
             .split(/\n|(?:\d+\.?\s*)/)
             .map((s: string) => s.trim())
@@ -99,7 +129,7 @@ serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ result }),
+      JSON.stringify({ result, model: modelName }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
