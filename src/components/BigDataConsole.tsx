@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Trash2, Edit2, Check, Sparkles, Wand2, History, Maximize2, Minimize2, Split, FileText, Highlighter, Palette, Type, Bold, Italic, Link, RotateCcw } from 'lucide-react';
+import { Plus, Trash2, Edit2, Check, Sparkles, Wand2, History, Maximize2, Minimize2, Split, FileText, Highlighter, Palette, Type, Bold, Italic, Link, RotateCcw, ClipboardPaste } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from './ui/button';
 import { toast } from 'sonner';
@@ -394,6 +394,22 @@ const BigDataConsole = ({ handleAIAction, activeMode, setActiveMode }: { handleA
         }
     };
 
+    const handlePasteContent = async () => {
+        try {
+            const text = await navigator.clipboard.readText();
+            if (text) {
+                const cursor = textareaRef.current?.selectionStart || activeSheet.content.length;
+                const newContent = activeSheet.content.slice(0, cursor) + text + activeSheet.content.slice(cursor);
+                handleContentChange(newContent);
+                toast.success("Content Pasted from Clipboard");
+            } else {
+                toast.error("Clipboard is empty");
+            }
+        } catch (err) {
+            toast.error("Need Permission to Paste");
+        }
+    };
+
     const lines = activeSheet.content.split('\n');
     const lineCount = lines.length;
 
@@ -546,87 +562,109 @@ const BigDataConsole = ({ handleAIAction, activeMode, setActiveMode }: { handleA
             <div className="absolute inset-0 bg-[#D4AF37]/5 blur-[120px] pointer-events-none animate-pulse" />
 
             {/* Header / Tabs */}
-            <div className="flex items-center justify-between mt-6 mb-4 px-2">
-                <div className="flex items-center gap-2 overflow-x-auto pb-2 no-scrollbar">
-
-                    {sheets.map(sheet => (
-                        <div
-                            key={sheet.id}
-                            className={cn(
-                                "group flex items-center gap-2 px-6 py-3 rounded-2xl border transition-all cursor-pointer whitespace-nowrap",
-                                activeSheetId === sheet.id
-                                    ? "bg-primary/20 border-primary text-primary shadow-[0_0_20px_rgba(212,175,55,0.15)]"
-                                    : "bg-white/[0.02] border-white/5 text-zinc-500 hover:border-white/20"
-                            )}
-                            onClick={() => setActiveSheetIdByMode(prev => ({ ...prev, [activeMode]: sheet.id }))}
+            <div className="flex flex-col md:flex-row md:items-center justify-between mt-6 mb-4 px-2 gap-4 md:gap-2">
+                <div className="flex flex-col gap-2 w-full md:flex-1 overflow-hidden">
+                    <div className="flex items-center justify-between md:hidden px-1">
+                        <span className="text-[9px] font-black text-zinc-600 uppercase tracking-widest">Active Sheets</span>
+                    </div>
+                    <div className="flex items-center gap-2 overflow-x-auto no-scrollbar scroll-smooth pb-2 w-full">
+                        {sheets.map(sheet => (
+                            <div
+                                key={sheet.id}
+                                className={cn(
+                                    "group flex items-center gap-2 px-4 md:px-6 py-2.5 md:py-3 rounded-xl md:rounded-2xl border transition-all cursor-pointer whitespace-nowrap",
+                                    activeSheetId === sheet.id
+                                        ? "bg-primary/20 border-primary text-primary shadow-[0_4px_15px_rgba(212,175,55,0.15)]"
+                                        : "bg-white/[0.02] border-white/5 text-zinc-500 hover:border-white/20"
+                                )}
+                                onClick={() => setActiveSheetIdByMode(prev => ({ ...prev, [activeMode]: sheet.id }))}
+                            >
+                                {activeSheetId === sheet.id ? (
+                                    <input
+                                        autoFocus
+                                        className="bg-transparent border-none outline-none text-[10px] md:text-xs font-black uppercase tracking-widest w-20 md:w-24 placeholder:text-primary/40"
+                                        value={sheet.name}
+                                        onChange={(e) => renameSheet(sheet.id, e.target.value)}
+                                        onClick={(e) => e.stopPropagation()}
+                                    />
+                                ) : (
+                                    <span className="text-[10px] md:text-xs font-black uppercase tracking-widest">{sheet.name}</span>
+                                )}
+                                {activeSheetId === sheet.id && (
+                                    <button onClick={(e) => { e.stopPropagation(); deleteSheet(sheet.id); }} className="opacity-0 group-hover:opacity-100 transition-opacity p-1">
+                                        <Trash2 className="w-3   h-3 text-red-500/60" />
+                                    </button>
+                                )}
+                            </div>
+                        ))}
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={addSheet}
+                            className="w-9 h-9 md:w-10 md:h-10 rounded-xl md:rounded-2xl border border-white/5 bg-white/[0.02] hover:bg-white/10 shrink-0"
                         >
-                            {activeSheetId === sheet.id ? (
-                                <input
-                                    autoFocus
-                                    className="bg-transparent border-none outline-none text-xs font-black uppercase tracking-widest w-24"
-                                    value={sheet.name}
-                                    onChange={(e) => renameSheet(sheet.id, e.target.value)}
-                                    onClick={(e) => e.stopPropagation()}
-                                />
-                            ) : (
-                                <span className="text-xs font-black uppercase tracking-widest">{sheet.name}</span>
-                            )}
-                            {activeSheetId === sheet.id && (
-                                <button onClick={(e) => { e.stopPropagation(); deleteSheet(sheet.id); }} className="opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <Trash2 className="w-3 h-3 text-red-500/60" />
-                                </button>
-                            )}
-                        </div>
-                    ))}
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={addSheet}
-                        className="w-10 h-10 rounded-2xl border border-white/5 bg-white/[0.02] hover:bg-white/10"
-                    >
-                        <Plus className="w-4 h-4 text-primary" />
-                    </Button>
+                            <Plus className="w-4 h-4 text-primary" />
+                        </Button>
+                    </div>
                 </div>
 
-                <div className="flex items-center gap-3">
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={clearContent}
-                        className="rounded-xl border border-white/5 text-zinc-500 hover:text-red-400"
-                    >
-                        <Trash2 className="w-3 h-3 mr-2" />
-                        Clear
-                    </Button>
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={handleUndo}
-                        disabled={historyIndex <= 0}
-                        className="rounded-xl border border-white/5 text-zinc-500 hover:text-white"
-                    >
-                        <RotateCcw className="w-3 h-3 mr-2" />
-                        Undo
-                    </Button>
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={optimizePrompt}
-                        disabled={isFixing}
-                        className="rounded-xl border-primary/20 text-primary text-[10px] font-black uppercase tracking-widest bg-primary/5 hover:bg-primary/10"
-                    >
-                        <Wand2 className={cn("w-3 h-3 mr-2", isFixing && "animate-spin")} />
-                        Optimize Prompt
-                    </Button>
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setIsFocusMode(!isFocusMode)}
-                        className="rounded-xl border-white/10 text-[10px] font-black uppercase tracking-widest"
-                    >
-                        {isFocusMode ? <Minimize2 className="w-3 h-3 mr-2" /> : <Maximize2 className="w-3 h-3 mr-2" />}
-                        {isFocusMode ? 'Exit Focus' : 'Focus Mode'}
-                    </Button>
+                <div className="flex items-center justify-between md:justify-end gap-1.5 md:gap-3 w-full md:w-auto pt-1 md:pt-0 border-t border-white/5 md:border-none">
+                    <div className="flex items-center gap-1.5">
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={clearContent}
+                            className="rounded-xl border border-white/5 text-zinc-500 hover:text-red-400 px-3 h-9"
+                            title="Clear Sheet"
+                        >
+                            <Trash2 className="w-4 h-4 md:mr-2" />
+                            <span className="hidden md:inline">Clear</span>
+                        </Button>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={handleUndo}
+                            disabled={historyIndex <= 0}
+                            className="rounded-xl border border-white/5 text-zinc-500 hover:text-white px-3 h-9"
+                            title="Undo"
+                        >
+                            <RotateCcw className="w-4 h-4 md:mr-2" />
+                            <span className="hidden md:inline">Undo</span>
+                        </Button>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={handlePasteContent}
+                            className="rounded-xl border border-white/5 text-[#D4AF37] hover:bg-[#D4AF37]/10 px-3 h-9"
+                            title="Paste Content"
+                        >
+                            <ClipboardPaste className="w-4 h-4 md:mr-2" />
+                            <span className="hidden md:inline font-black uppercase text-[10px]">Paste</span>
+                        </Button>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={optimizePrompt}
+                            disabled={isFixing}
+                            className="rounded-xl border-primary bg-primary text-black md:text-primary md:bg-primary/5 md:border-primary/20 text-[10px] md:text-[11px] font-black uppercase tracking-widest hover:bg-primary/20 px-3 md:px-6 h-9 shadow-[0_0_15px_rgba(212,175,55,0.2)] md:shadow-none transition-all"
+                        >
+                            <Wand2 className={cn("w-3.5 h-3.5 md:mr-2", isFixing && "animate-spin")} />
+                            <span className="hidden md:inline">Optimize Prompt</span>
+                            <span className="md:hidden">Optimize</span>
+                        </Button>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setIsFocusMode(!isFocusMode)}
+                            className="hidden md:flex rounded-xl border-white/10 text-[10px] font-black uppercase tracking-widest h-9"
+                        >
+                            {isFocusMode ? <Minimize2 className="w-3 h-3 mr-2" /> : <Maximize2 className="w-3 h-3 mr-2" />}
+                            {isFocusMode ? 'Exit Focus' : 'Focus'}
+                        </Button>
+                    </div>
                 </div>
             </div>
 
@@ -749,26 +787,30 @@ const BigDataConsole = ({ handleAIAction, activeMode, setActiveMode }: { handleA
                 </div>
 
                 {/* Footer / Status Bar */}
-                <div className="h-10 bg-white/[0.03] border-t border-white/5 px-6 flex items-center justify-between z-10">
-                    <div className="flex items-center gap-6">
-                        <div className="flex items-center gap-2">
-                            <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">Rows:</span>
-                            <span className="text-[9px] font-bold text-primary">{lineCount}</span>
+                <div className="h-10 md:h-12 bg-white/[0.03] border-t border-white/5 px-3 md:px-6 flex items-center justify-between z-10 overflow-x-auto no-scrollbar scroll-smooth">
+                    <div className="flex items-center gap-4 md:gap-6 min-w-max">
+                        <div className="flex items-center gap-1.5">
+                            <span className="text-[8px] md:text-[9px] font-black text-zinc-600 uppercase tracking-widest">Rows:</span>
+                            <span className="text-[8px] md:text-[9px] font-bold text-primary">{lineCount}</span>
                         </div>
-                        <div className="flex items-center gap-2">
-                            <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">Words:</span>
+                        <div className="flex items-center gap-1.5 md:hidden">
+                            <span className="text-[8px] font-black text-zinc-600 uppercase tracking-widest">Words:</span>
+                            <span className="text-[8px] font-bold text-primary">{activeSheet.content ? activeSheet.content.trim().split(/\s+/).filter(Boolean).length : 0}</span>
+                        </div>
+                        <div className="hidden md:flex items-center gap-2">
+                            <span className="text-[9px] font-black text-zinc-600 uppercase tracking-widest">Words:</span>
                             <span className="text-[9px] font-bold text-primary">{activeSheet.content ? activeSheet.content.trim().split(/\s+/).filter(Boolean).length : 0}</span>
                         </div>
-                        <div className="flex items-center gap-2">
-                            <span className="text-[9px] font-black text-zinc-500 uppercase tracking-widest">Mode:</span>
-                            <span className="text-[9px] font-black text-primary uppercase">{activeMode}</span>
+                        <div className="flex items-center gap-1.5">
+                            <span className="text-[8px] md:text-[9px] font-black text-zinc-600 uppercase tracking-widest">Mode:</span>
+                            <span className="text-[8px] md:text-[9px] font-black text-primary uppercase">{activeMode}</span>
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 md:gap-3 min-w-max ml-4">
                         <button
                             onClick={takeSnapshot}
-                            className="flex items-center gap-2 px-3 py-1 bg-white/5 rounded-full border border-white/5 hover:bg-white/10 transition-colors"
+                            className="hidden md:flex items-center gap-2 px-3 py-1 bg-white/5 rounded-full border border-white/5 hover:bg-white/10 transition-colors"
                         >
                             <History className="w-3 h-3 text-zinc-500" />
                             <span className="text-[9px] font-black text-zinc-400 uppercase tracking-widest">Snapshot</span>
@@ -776,23 +818,23 @@ const BigDataConsole = ({ handleAIAction, activeMode, setActiveMode }: { handleA
                         <button
                             onClick={toggleDiff}
                             className={cn(
-                                "flex items-center gap-2 px-3 py-1 rounded-full border transition-colors",
+                                "flex items-center gap-1.5 md:gap-2 px-2.5 md:px-3 py-1 rounded-full border transition-colors",
                                 isDiffMode ? "bg-orange-500/20 border-orange-500/40 text-orange-500" : "bg-white/5 border-white/5 text-zinc-400 hover:bg-white/10"
                             )}
                         >
                             <Split className="w-3 h-3" />
-                            <span className="text-[9px] font-black uppercase tracking-widest">Compare</span>
+                            <span className="text-[8px] md:text-[9px] font-black uppercase tracking-widest">Diff</span>
                         </button>
-                        <div className="flex items-center gap-2 px-3 py-1 bg-primary/10 rounded-full border border-primary/20">
+                        <div className="flex items-center gap-1.5 md:gap-2 px-2.5 md:px-3 py-1 bg-primary/10 rounded-full border border-primary/20">
                             <Sparkles className="w-3 h-3 text-primary" />
-                            <span className="text-[9px] font-black text-primary uppercase tracking-widest">Tokens: {activeSheet.content ? Math.ceil(activeSheet.content.length / 4) : 0}</span>
+                            <span className="text-[8px] md:text-[9px] font-black text-primary uppercase tracking-widest">T: {activeSheet.content ? Math.ceil(activeSheet.content.length / 4) : 0}</span>
                         </div>
                         <div className={cn(
-                            "flex items-center gap-2 px-3 py-1 rounded-full border transition-all",
-                            aiUsageCount >= AI_LIMIT ? "bg-red-500/10 border-red-500/20 text-red-500" : "bg-white/5 border-white/10 text-zinc-400"
+                            "flex items-center gap-1.5 md:gap-2 px-2.5 md:px-3 py-1 rounded-full border transition-all",
+                            aiUsageCount >= AI_LIMIT ? "bg-red-500/10 border-red-500/20 text-red-500" : "bg-white/5 border-white/10 text-zinc-500"
                         )}>
-                            <div className={cn("w-1.5 h-1.5 rounded-full", aiUsageCount >= AI_LIMIT ? "bg-red-500 animate-pulse" : "bg-primary")} />
-                            <span className="text-[9px] font-black uppercase tracking-widest">AI Intelligence: {aiUsageCount}/{AI_LIMIT}</span>
+                            <div className={cn("w-1 h-1 md:w-1.5 md:h-1.5 rounded-full", aiUsageCount >= AI_LIMIT ? "bg-red-500 animate-pulse" : "bg-primary")} />
+                            <span className="text-[8px] md:text-[9px] font-black uppercase tracking-widest">AI: {aiUsageCount}/{AI_LIMIT}</span>
                         </div>
                     </div>
                 </div>

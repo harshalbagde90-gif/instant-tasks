@@ -67,9 +67,9 @@ export function TaskItem({ task, index, onToggle, onUpdate, onDelete, onAIAction
       const result = await onAIAction(task.id, action);
       if (action === 'breakdown' && Array.isArray(result)) {
         onAddSubtasks(task.id, result);
-      } else if (typeof result === 'string') {
-        onUpdate(task.id, result, task.text); // Save current text as previousText
       }
+      // NOTE: For 'improve' action, Index.handleAIAction already updates the task
+      // No need to call onUpdate here to avoid double-update conflict
     } catch (error) {
       console.error('AI action failed:', error);
     } finally {
@@ -85,7 +85,8 @@ export function TaskItem({ task, index, onToggle, onUpdate, onDelete, onAIAction
       "group relative flex flex-col gap-3 p-6 rounded-[1.5rem] bg-zinc-900/80 border-2 border-white/[0.1] transition-all duration-500 hover:bg-zinc-950 hover:border-primary/50 hover:shadow-[0_0_40px_rgba(var(--primary),0.15)] overflow-hidden shadow-[0_4px_20px_rgba(0,0,0,0.3)]",
       "before:absolute before:inset-0 before:bg-gradient-to-br before:from-white/[0.02] before:to-transparent before:pointer-events-none",
       task.completed && "opacity-60",
-      isLoading && "animate-shimmer"
+      isLoading && "animate-shimmer",
+      isEditing && "border-[#D4AF37] scale-[1.02] bg-black shadow-[0_0_30px_rgba(212,175,55,0.2)] border-opacity-100 z-30"
     )}>
       <div className="flex items-start gap-4">
         {/* Serial Number */}
@@ -128,7 +129,7 @@ export function TaskItem({ task, index, onToggle, onUpdate, onDelete, onAIAction
             <div className="space-y-0.5">
               <span
                 className={cn(
-                  "block text-lg font-bold tracking-tight transition-all duration-300 cursor-pointer",
+                  "block text-base md:text-lg font-bold tracking-tight transition-all duration-300 cursor-pointer line-clamp-2 md:line-clamp-none",
                   task.completed ? "line-through text-gray-400" : "text-white"
                 )}
                 onClick={() => !task.completed && setIsEditing(true)}

@@ -189,7 +189,7 @@ export function TaskDetail({
                     <textarea
                         value={task.text}
                         onChange={(e) => onUpdate({ text: e.target.value })}
-                        className="w-full bg-muted/20 hover:bg-muted/40 border border-white/5 hover:border-primary/20 rounded-2xl p-4 text-2xl font-bold text-foreground focus:ring-0 resize-none leading-tight min-h-[80px] transition-all placeholder:text-muted-foreground/20"
+                        className="w-full bg-muted/20 hover:bg-muted/40 border-2 border-[#D4AF37]/30 focus:border-[#D4AF37] hover:border-[#D4AF37]/50 rounded-2xl p-4 text-2xl font-bold text-foreground focus:ring-0 resize-none leading-tight min-h-[80px] transition-all placeholder:text-muted-foreground/20 shadow-[0_4px_20px_rgba(0,0,0,0.3)] focus:shadow-[0_0_30px_rgba(212,175,55,0.1)]"
                         placeholder="What is this task about?"
                     />
 

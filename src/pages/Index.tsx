@@ -409,6 +409,9 @@ const Index = () => {
             const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
             let result: string | string[] = "";
 
+            console.log('🔍 [AI Debug] Starting AI action:', action, 'for task ID:', id);
+            console.log('🔑 [AI Debug] API Key present:', !!GEMINI_API_KEY, 'Valid:', GEMINI_API_KEY && !GEMINI_API_KEY.includes("YOUR_"));
+
             if (GEMINI_API_KEY && !GEMINI_API_KEY.includes("YOUR_")) {
                 let systemPrompt = "";
                 let userPrompt = "";
@@ -418,8 +421,8 @@ const Index = () => {
                     userPrompt = `CONTEXT: ${options.context || 'N/A'}\n\nEDIT THIS TEXT: "${taskText}"\n\nINSTRUCTION: ${options.instruction}`;
                 } else if (action === 'big-data-temp' || action === 'improve') {
                     const mode = options?.mode || 'General';
-                    systemPrompt = `You are a professional ${mode} specialist. \nGOAL: Optimize the content for clarity, efficiency, and professional standard.\n\nRULES:\n1. Fix errors.\n2. Enhance structure based on ${mode} standards.\n3. Return ONLY corrected content.`;
-                    userPrompt = `Optimize this ${mode} content:\n\n${taskText}`;
+                    systemPrompt = `You are a rigorous proofreader. Your ONLY job is to take the user text and return it with PERFECT grammar, spelling, and punctuation. DO NOT keep typos like 'thios' or 'etaing'. Fix every error. DANGER: Return ONLY the corrected text. NO conversation. NO explanations. NO "Here is your text". Just the plain corrected string.`;
+                    userPrompt = `Fix this text:\n\n${taskText}`;
                 } else if (action === 'shorten') {
                     systemPrompt = "Shorten the mission to max 8 words. Return ONLY corrected text.";
                     userPrompt = `Shorten: "${taskText}"`;
@@ -428,13 +431,16 @@ const Index = () => {
                     userPrompt = `Breakdown: "${taskText}"`;
                 }
 
-                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${GEMINI_API_KEY}`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
+                        system_instruction: {
+                            parts: [{ text: systemPrompt }]
+                        },
                         contents: [{
                             role: "user",
-                            parts: [{ text: `SYSTEM_PROMPT: ${systemPrompt}\n\nUSER_REQUEST:\n${userPrompt}` }]
+                            parts: [{ text: userPrompt }]
                         }],
                         generationConfig: { temperature: 0.3, maxOutputTokens: 2048 }
                     })
@@ -443,14 +449,20 @@ const Index = () => {
                 if (!response.ok) throw new Error(`Gemini API Error: ${response.status}`);
                 const data = await response.json();
                 result = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
+                console.log('🤖 [AI Debug] Raw API response:', result);
             } else {
                 // Mock/Fallback
                 result = taskText;
+                console.log('⚠️ [AI Debug] No API key, using fallback text');
             }
 
             if (typeof result === 'string') {
-                result = result.replace(/^["']|["']$/g, '').trim();
-                if (action === 'improve' && result.toLowerCase() === taskText.toLowerCase().trim()) {
+                result = result.replace(/```[a-z]*\n?|```/gi, '').replace(/^["']|["']$/g, '').trim();
+                console.log('✨ [AI Debug] Cleaned result:', result);
+                console.log('📝 [AI Debug] Original text:', taskText.trim());
+                console.log('🔄 [AI Debug] Are they same?', result.trim() === taskText.trim());
+                if (action === 'improve' && result.trim() === taskText.trim()) {
+                    console.log('⏭️ [AI Debug] Returning __NO_CHANGE__');
                     return "__NO_CHANGE__";
                 }
             }
@@ -466,6 +478,9 @@ const Index = () => {
             }
 
             if (action === 'improve' && id !== 'big-data-temp') {
+                console.log('💾 [AI Debug] Calling updateTask with ID:', id, 'New text:', result);
+                const taskExists = tasks.find(t => t.id === id);
+                console.log('✅ [AI Debug] Task exists?', !!taskExists, 'Task data:', taskExists);
                 updateTask(id, { text: result as string, previousText: tasks.find(t => t.id === id)?.text });
             }
 
@@ -478,9 +493,14 @@ const Index = () => {
     }, [tasks, selectedLanguage]);
 
     const updateTask = (id: string, updates: Partial<Task>) => {
-        setTasks(prev => prev.map(task =>
-            task.id === id ? { ...task, ...updates } : task
-        ));
+        console.log('🔧 [Update Debug] updateTask called with ID:', id, 'Updates:', updates);
+        setTasks(prev => {
+            const newTasks = prev.map(task =>
+                task.id === id ? { ...task, ...updates } : task
+            );
+            console.log('📊 [Update Debug] Updated tasks array:', newTasks);
+            return newTasks;
+        });
     };
 
     const handleUndoTask = useCallback((id: string) => {
@@ -597,13 +617,17 @@ const Index = () => {
                     <div className="absolute left-1/2 -translate-x-1/2 md:static md:translate-x-0 flex items-center gap-2 md:gap-6 z-50">
                         <Popover open={isModePopoverOpen} onOpenChange={setIsModePopoverOpen}>
                             <PopoverTrigger asChild>
-                                <div className="flex items-center gap-2 px-4 py-1.5 bg-zinc-900/80 backdrop-blur-md border border-white/10 rounded-full shadow-lg cursor-pointer group hover:border-[#FACC15]/50 transition-all">
-                                    <LayoutGrid className="w-3.5 h-3.5 md:w-4 md:h-4 text-[#FACC15] group-hover:scale-110 transition-transform" />
-                                    <span className="text-[10px] md:text-sm font-bold text-zinc-300 tracking-wide uppercase whitespace-nowrap">
-                                        <span className="md:hidden opacity-60 mr-1">Mode:</span>
+                                <div className="flex items-center gap-3 px-6 md:px-10 py-2 bg-zinc-900/90 backdrop-blur-xl border border-[#FACC15]/40 rounded-full shadow-[0_0_25px_rgba(250,204,21,0.2)] cursor-pointer group hover:border-[#FACC15] hover:shadow-[0_0_40px_rgba(250,204,21,0.4)] transition-all duration-500 relative overflow-hidden group/mode">
+                                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent translate-x-[-150%] group-hover:translate-x-[150%] transition-transform duration-1000" />
+                                    <LayoutGrid className="w-4 h-4 md:w-5 md:h-5 text-[#FACC15] group-hover:rotate-12 transition-all duration-300" />
+                                    <span className="text-[12px] md:text-base font-black text-[#FACC15] tracking-[0.05em] uppercase whitespace-nowrap drop-shadow-[0_0_12px_rgba(250,204,21,0.4)]">
+                                        <span className="opacity-40 mr-1.5 font-bold tracking-normal italic normal-case">mode:</span>
                                         {appMode === 'basic' ? 'Basic' : appMode === 'advanced' ? 'Advanced' : 'Big Data'}
                                     </span>
-                                    <ChevronDown className="w-3 h-3 md:w-4 md:h-4 text-zinc-500 group-hover:text-[#FACC15] transition-colors" />
+                                    <div className="flex items-center gap-2 ml-1">
+                                        <div className="w-1.5 h-1.5 rounded-full bg-[#FACC15] animate-pulse shadow-[0_0_12px_#FACC15]" />
+                                        <ChevronDown className="w-4 h-4 md:w-5 md:h-5 text-zinc-500 group-hover:text-[#FACC15] transition-all" />
+                                    </div>
                                 </div>
                             </PopoverTrigger>
                             <PopoverContent className="w-64 p-2 bg-card/95 backdrop-blur-xl border border-border shadow-2xl rounded-2xl z-50" align="start">
@@ -654,18 +678,18 @@ const Index = () => {
                     </div>
                 </header>
 
-                <div id="main-content-area" className={cn("flex-1 overflow-y-auto pt-0 pb-28 md:pb-10 custom-scrollbar relative z-10 transition-all", isSidebarOpen ? "px-3 md:px-6" : "px-4 md:px-10", isRefreshing && "opacity-20 blur-sm")}>
+                <div id="main-content-area" className={cn("flex-1 overflow-y-auto pt-8 md:pt-0 pb-28 md:pb-10 custom-scrollbar relative z-10 transition-all", isSidebarOpen ? "px-3 md:px-6" : "px-4 md:px-10", isRefreshing && "opacity-20 blur-sm")}>
                     <div className="relative">
-                        <div className="mt-4 md:mt-10 pl-0 md:pl-8 flex flex-col gap-4 md:gap-8">
-                            <div className="flex flex-col md:flex-row items-center md:items-center gap-4 md:gap-6 w-full justify-center md:justify-start">
+                        <div className="mt-8 md:mt-10 pl-0 md:pl-8 flex flex-col gap-4 md:gap-8">
+                            <div className="flex flex-col md:flex-row items-center md:items-center gap-2 md:gap-6 w-full justify-center md:justify-start">
                                 <div className="flex flex-row items-center gap-3 md:gap-6 w-full justify-center md:w-auto md:justify-start">
                                     {animationData && (
-                                        <div className="w-10 h-10 md:w-16 md:h-16 flex-shrink-0">
+                                        <div className="w-12 h-12 md:w-20 md:h-20 flex-shrink-0">
                                             <Lottie animationData={animationData} loop={true} className="w-full h-full" />
                                         </div>
                                     )}
                                     <div className="flex flex-col items-start cursor-default group/hero">
-                                        <h1 className="text-2xl md:text-4xl font-black text-foreground tracking-tight leading-none font-sans hover:translate-x-1 transition-all duration-500 hover:text-white dark:hover:drop-shadow-[0_0_15px_rgba(255,255,255,0.3)] text-left">
+                                        <h1 className="text-3xl md:text-5xl font-black text-foreground tracking-tight leading-none font-sans hover:translate-x-1 transition-all duration-500 hover:text-white dark:hover:drop-shadow-[0_0_15px_rgba(255,255,255,0.3)] text-left">
                                             {getGreeting(currentTime)}<span className="text-primary group-hover/hero:animate-pulse">.</span>
                                         </h1>
                                         <div className="flex items-center gap-2 opacity-60 hover:opacity-100 transition-all duration-500 group/name justify-start">
@@ -707,14 +731,14 @@ const Index = () => {
                                     </div>
                                 </div>
                                 <div className={cn(appMode === 'big-data' ? "ml-0 md:ml-4" : "ml-0 md:ml-12", "w-full md:w-auto flex justify-center md:justify-start")}>
-                                    <div className="flex flex-col justify-center items-center md:items-start bg-black/40 md:bg-white/[0.03] backdrop-blur-xl px-4 py-8 md:px-4 md:py-1.5 rounded-[2rem] md:rounded-xl border border-white/5 md:border-white/10 shadow-[0_0_30px_rgba(0,0,0,0.5)] md:shadow-[0_0_20px_rgba(0,0,0,0.2)] min-w-[200px] md:min-w-0 w-[95%] md:w-auto">
+                                    <div className="flex flex-col justify-center items-center md:items-start bg-black/40 md:bg-white/[0.03] backdrop-blur-xl px-4 py-4 md:px-4 md:py-1.5 rounded-[2rem] md:rounded-xl border border-white/5 md:border-white/10 shadow-[0_0_30px_rgba(0,0,0,0.5)] md:shadow-[0_0_20px_rgba(0,0,0,0.2)] min-w-[200px] md:min-w-0 w-[95%] md:w-auto">
 
                                         {/* Mobile View: Digital Clock Style */}
                                         <div className="flex flex-col items-center md:hidden w-full">
-                                            <span className="text-4xl font-black text-[#FACC15] font-mono tracking-widest drop-shadow-[0_0_10px_rgba(250,204,21,0.5)]">
+                                            <span className="text-3xl font-black text-[#FACC15] font-mono tracking-widest drop-shadow-[0_0_10px_rgba(250,204,21,0.5)]">
                                                 {format(currentTime, 'hh:mm:ss a')}
                                             </span>
-                                            <div className="flex items-center gap-2 mt-3 text-xs font-bold text-zinc-500 uppercase tracking-[0.3em]">
+                                            <div className="flex items-center gap-2 mt-3 text-sm font-bold text-zinc-500 uppercase tracking-[0.2em]">
                                                 <span>{format(currentTime, 'EEEE')}</span>
                                                 <span className="w-1 h-1 rounded-full bg-zinc-600" />
                                                 <span>{format(currentTime, 'MMM dd yyyy')}</span>
@@ -972,9 +996,9 @@ const Index = () => {
                         </div>
 
                         <div className={cn(
-                            "relative md:absolute right-0 z-20 transition-all duration-700 ease-in-out",
+                            "hidden md:block relative md:absolute right-0 z-20 transition-all duration-700 ease-in-out order-first md:order-last",
                             appMode === 'big-data' ? "top-0 md:-top-8" : "top-0 md:top-6",
-                            "mt-6 md:mt-0 mx-auto md:mx-0 max-w-sm md:max-w-none",
+                            "mt-0 md:mt-0 mb-6 md:mb-0 mx-auto md:mx-0 max-w-sm md:max-w-none",
                             (isSidebarOpen || selectedTaskId) ? "md:opacity-0 md:translate-x-10 md:pointer-events-none md:blur-xl md:scale-90" : "opacity-100 translate-x-0 scale-100"
                         )}>
                             <WallPrint />
@@ -1028,21 +1052,23 @@ const Index = () => {
                                         <div className="w-1.5 h-1.5 rounded-full bg-primary" />
                                         <span className="text-[9px] font-black text-primary/60 uppercase tracking-[0.3em]">Operational Phase</span>
                                     </div>
-                                    <div className="flex bg-white/[0.03] backdrop-blur-md border border-white/10 p-1 rounded-2xl shadow-2xl w-fit">
-                                        {['General', 'Script', 'Code', 'Prompts'].map((m) => (
-                                            <button
-                                                key={m}
-                                                onClick={() => setActiveMode(m as any)}
-                                                className={cn(
-                                                    "px-6 py-2 rounded-xl text-[9.5px] font-black uppercase tracking-[0.2em] transition-all duration-500",
-                                                    activeMode === m
-                                                        ? "bg-primary text-black shadow-[0_0_15px_rgba(212,175,55,0.25)]"
-                                                        : "text-zinc-500 hover:text-zinc-300"
-                                                )}
-                                            >
-                                                {m}
-                                            </button>
-                                        ))}
+                                    <div className="flex bg-zinc-900 border border-white/5 p-1 px-1.5 rounded-2xl shadow-inner w-full md:w-fit overflow-x-auto no-scrollbar scroll-smooth">
+                                        <div className="flex gap-1.5 min-w-max">
+                                            {['General', 'Script', 'Code', 'Prompts'].map((m) => (
+                                                <button
+                                                    key={m}
+                                                    onClick={() => setActiveMode(m as any)}
+                                                    className={cn(
+                                                        "px-5 md:px-6 py-2 rounded-xl text-[9px] md:text-[9.5px] font-black uppercase tracking-[0.2em] transition-all duration-300",
+                                                        activeMode === m
+                                                            ? "bg-primary text-black shadow-[0_4px_12px_rgba(212,175,55,0.3)]"
+                                                            : "text-zinc-500 hover:text-zinc-300 hover:bg-white/5"
+                                                    )}
+                                                >
+                                                    {m}
+                                                </button>
+                                            ))}
+                                        </div>
                                     </div>
                                 </div>
                             ) : (
@@ -1312,7 +1338,7 @@ const TaskItemView = ({
             onClick={onClick}
             className={cn(
                 "group relative flex items-center justify-between p-5 rounded-[2rem] cursor-pointer transition-all duration-500",
-                isSelected ? "bg-muted border-2 border-primary" : "bg-card/40 border border-border/50 hover:bg-muted"
+                isSelected ? "bg-muted border-2 border-[#D4AF37] shadow-[0_0_20px_rgba(212,175,55,0.15)]" : "bg-card/40 border border-border/50 hover:bg-muted"
             )}
         >
             <div className="flex items-center gap-6">
@@ -1330,7 +1356,7 @@ const TaskItemView = ({
                 <div className="flex flex-col">
                     <div className="flex items-baseline gap-2">
                         {index && <span className="text-[14px] font-black text-primary/60 uppercase tabular-nums">{index.toString().padStart(2, '0')}.</span>}
-                        <span className={cn("text-base font-bold tracking-tight", task.completed ? "text-muted-foreground/50 line-through" : "text-foreground group-hover:text-primary")}>{task.text}</span>
+                        <span className={cn("text-sm md:text-base font-bold tracking-tight line-clamp-2 md:line-clamp-none", task.completed ? "text-muted-foreground/50 line-through" : "text-foreground group-hover:text-primary")}>{task.text}</span>
                     </div>
                     {appMode === 'advanced' && (
                         <div className="flex items-center gap-2 mt-1.5">
