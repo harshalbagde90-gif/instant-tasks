@@ -12,6 +12,7 @@ import {
     Plus,
     Circle,
     ListTodo,
+    Sparkles,
     Check,
     RotateCcw,
     ChevronDown,
@@ -30,6 +31,16 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 import { Category, TagType } from '@/types/task';
 import * as LucideIcons from 'lucide-react';
@@ -57,6 +68,10 @@ export function TaskDetail({
 }: TaskDetailProps) {
     const [subtaskInput, setSubtaskInput] = useState('');
     const [isUploading, setIsUploading] = useState(false);
+    const [editingSubtaskId, setEditingSubtaskId] = useState<string | null>(null);
+    const [editingSubtaskText, setEditingSubtaskText] = useState('');
+    const [showEnhanceDialog, setShowEnhanceDialog] = useState(false);
+    const [isEnhancing, setIsEnhancing] = useState(false);
 
     if (!task) return null;
 
@@ -82,6 +97,80 @@ export function TaskDetail({
     const deleteSubtask = (id: string) => {
         const updatedSubtasks = task.subtasks?.filter(st => st.id !== id);
         onUpdate({ subtasks: updatedSubtasks });
+    };
+
+    const startEditingSubtask = (id: string, text: string) => {
+        setEditingSubtaskId(id);
+        setEditingSubtaskText(text);
+    };
+
+    const updateSubtask = (id: string) => {
+        if (!editingSubtaskText.trim()) {
+            setEditingSubtaskId(null);
+            return;
+        }
+        const updatedSubtasks = task.subtasks?.map(st =>
+            st.id === id ? { ...st, text: editingSubtaskText } : st
+        );
+        onUpdate({ subtasks: updatedSubtasks });
+        setEditingSubtaskId(null);
+        setEditingSubtaskText('');
+    };
+
+    const handleEnhanceSubtasks = async () => {
+        if (!task.subtasks || task.subtasks.length === 0) {
+            toast.error('No subtasks to enhance');
+            return;
+        }
+
+        setIsEnhancing(true);
+        setShowEnhanceDialog(false);
+
+        try {
+            // Combine all subtasks for single API call
+            const subtasksText = task.subtasks.map((st, idx) => `${idx + 1}. ${st.text}`).join('\n');
+
+            const prompt = `Please enhance and improve the following subtasks. Make them more clear, detailed, and actionable while keeping them concise:\n\n${subtasksText}\n\nReturn ONLY the enhanced subtasks, one per line, numbered.`;
+
+            const response = await fetch('https://api.openai.com/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${import.meta.env.VITE_OPENAI_API_KEY}`
+                },
+                body: JSON.stringify({
+                    model: 'gpt-3.5-turbo',
+                    messages: [{ role: 'user', content: prompt }],
+                    temperature: 0.7,
+                    max_tokens: 500
+                })
+            });
+
+            if (!response.ok) throw new Error('AI enhancement failed');
+
+            const data = await response.json();
+            const enhancedText = data.choices[0].message.content.trim();
+
+            // Parse enhanced subtasks
+            const enhancedLines = enhancedText.split('\n').filter(line => line.trim());
+            const enhancedSubtasks = task.subtasks.map((st, idx) => {
+                const enhancedLine = enhancedLines[idx]?.replace(/^\d+\.\s*/, '').trim() || st.text;
+                return { ...st, text: enhancedLine };
+            });
+
+            onUpdate({ subtasks: enhancedSubtasks });
+            toast.success('Subtasks enhanced successfully!');
+        } catch (error) {
+            console.error('Enhancement error:', error);
+            toast.error('Failed to enhance subtasks');
+        } finally {
+            setIsEnhancing(false);
+        }
+    };
+
+    const cancelEditingSubtask = () => {
+        setEditingSubtaskId(null);
+        setEditingSubtaskText('');
     };
 
     const completedSubtasks = task.subtasks?.filter(s => s.completed).length || 0;
@@ -470,10 +559,41 @@ export function TaskDetail({
                             <ListTodo className="w-3.5 h-3.5" />
                             <span>Subtasks {completedSubtasks}/{totalSubtasks}</span>
                         </div>
-                        <Button variant="ghost" size="icon" className="h-6 w-6 rounded-full text-muted-foreground">
-                            <MoreVertical className="w-4 h-4" />
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setShowEnhanceDialog(true)}
+                            disabled={!task.subtasks || task.subtasks.length === 0 || isEnhancing}
+                            className="h-7 px-2.5 rounded-lg text-[10px] font-black uppercase tracking-wider hover:bg-primary/5 hover:text-primary disabled:opacity-50 transition-all"
+                        >
+                            <Sparkles className="w-3.5 h-3.5 mr-1.5" />
+                            {isEnhancing ? 'Enhancing...' : 'AI Enhance'}
                         </Button>
                     </div>
+
+                    {/* AI Enhancement Warning Dialog */}
+                    <AlertDialog open={showEnhanceDialog} onOpenChange={setShowEnhanceDialog}>
+                        <AlertDialogContent className="max-w-md">
+                            <AlertDialogHeader>
+                                <AlertDialogTitle className="flex items-center gap-2">
+                                    <Sparkles className="w-5 h-5 text-primary" />
+                                    AI Subtask Enhancement
+                                </AlertDialogTitle>
+                                <AlertDialogDescription className="text-sm leading-relaxed pt-2">
+                                    Please ensure all your subtasks are added before enhancement.
+                                    AI will improve the clarity and detail of each subtask.
+                                    <br /><br />
+                                    <span className="font-semibold text-foreground">Continue?</span>
+                                </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                                <AlertDialogCancel>Not Yet</AlertDialogCancel>
+                                <AlertDialogAction onClick={handleEnhanceSubtasks} className="bg-primary hover:bg-primary/90">
+                                    Yes, Enhance
+                                </AlertDialogAction>
+                            </AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
 
                     <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
                         <div
@@ -482,41 +602,69 @@ export function TaskDetail({
                         />
                     </div>
 
-                    <div className="space-y-3">
-                        {task.subtasks?.map(st => (
-                            <div key={st.id} className="flex items-center gap-3 group px-1">
-                                <button
-                                    onClick={() => toggleSubtask(st.id)}
-                                    className={cn(
-                                        "w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all",
-                                        st.completed ? "bg-primary border-primary" : "border-border hover:border-primary/50"
+                    {/* Scrollable Subtasks Container */}
+                    <div className="max-h-[60vh] md:max-h-[400px] overflow-y-auto custom-scrollbar pr-1">
+                        <div className="space-y-3">
+                            {task.subtasks?.map(st => (
+                                <div key={st.id} className="flex items-center gap-3 group px-1">
+                                    <button
+                                        onClick={() => toggleSubtask(st.id)}
+                                        className={cn(
+                                            "w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all shrink-0",
+                                            st.completed ? "bg-primary border-primary" : "border-border hover:border-primary/50"
+                                        )}
+                                    >
+                                        {st.completed && <CheckCircle2 className="w-3 h-3 text-primary-foreground stroke-[4]" />}
+                                    </button>
+                                    {editingSubtaskId === st.id ? (
+                                        <input
+                                            type="text"
+                                            value={editingSubtaskText}
+                                            onChange={(e) => setEditingSubtaskText(e.target.value)}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter') updateSubtask(st.id);
+                                                if (e.key === 'Escape') cancelEditingSubtask();
+                                            }}
+                                            onBlur={() => updateSubtask(st.id)}
+                                            autoFocus
+                                            className="text-sm flex-1 bg-muted px-2.5 py-1.5 rounded-lg border border-primary/30 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                                        />
+                                    ) : (
+                                        <span
+                                            onDoubleClick={() => startEditingSubtask(st.id, st.text)}
+                                            onClick={(e) => {
+                                                // Mobile: Single tap to edit
+                                                if (e.detail === 2 || window.innerWidth < 768) {
+                                                    e.preventDefault();
+                                                    startEditingSubtask(st.id, st.text);
+                                                }
+                                            }}
+                                            className={cn(
+                                                "text-sm flex-1 transition-all cursor-text hover:bg-muted/50 px-2 py-1 rounded-md",
+                                                st.completed ? "text-muted-foreground line-through" : "text-foreground/80"
+                                            )}
+                                        >
+                                            {st.text}
+                                        </span>
                                     )}
-                                >
-                                    {st.completed && <CheckCircle2 className="w-3 h-3 text-primary-foreground stroke-[4]" />}
-                                </button>
-                                <span className={cn(
-                                    "text-sm flex-1 transition-all",
-                                    st.completed ? "text-muted-foreground line-through" : "text-foreground/80"
-                                )}>
-                                    {st.text}
-                                </span>
-                                <button
-                                    onClick={() => deleteSubtask(st.id)}
-                                    className="opacity-0 group-hover:opacity-100 p-1 text-muted-foreground hover:text-red-500 transition-all"
-                                >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                </button>
+                                    <button
+                                        onClick={() => deleteSubtask(st.id)}
+                                        className="opacity-0 group-hover:opacity-100 p-1 text-muted-foreground hover:text-red-500 transition-all shrink-0"
+                                    >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                </div>
+                            ))}
+                            <div className="flex items-center gap-3 group mt-2 bg-muted p-3 rounded-2xl border border-dashed border-border focus-within:border-primary/30 transition-all">
+                                <Plus className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
+                                <input
+                                    value={subtaskInput}
+                                    onChange={(e) => setSubtaskInput(e.target.value)}
+                                    onKeyDown={(e) => e.key === 'Enter' && handleAddSubtask()}
+                                    className="bg-transparent border-none text-sm text-foreground focus:ring-0 placeholder:text-muted-foreground/30 w-full"
+                                    placeholder="Add a new subtask..."
+                                />
                             </div>
-                        ))}
-                        <div className="flex items-center gap-3 group mt-2 bg-muted p-3 rounded-2xl border border-dashed border-border focus-within:border-primary/30 transition-all">
-                            <Plus className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
-                            <input
-                                value={subtaskInput}
-                                onChange={(e) => setSubtaskInput(e.target.value)}
-                                onKeyDown={(e) => e.key === 'Enter' && handleAddSubtask()}
-                                className="bg-transparent border-none text-sm text-foreground focus:ring-0 placeholder:text-muted-foreground/30 w-full"
-                                placeholder="Add a new subtask..."
-                            />
                         </div>
                     </div>
                 </div>

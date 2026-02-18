@@ -86,9 +86,37 @@ const BigDataConsole = ({ handleAIAction, activeMode, setActiveMode }: { handleA
         window.addEventListener('storage', handleRemoteJump);
         window.addEventListener('big-data-jump' as any, handleRemoteJump);
 
+        // Handle paste from mobile button
+        const handlePasteEvent = (e: any) => {
+            if (e?.detail?.content) {
+                const currentActiveSheetId = activeSheetIdByMode[activeMode];
+                const currentSheets = sheets[activeMode];
+                const activeSheet = currentSheets.find(s => s.id === currentActiveSheetId);
+
+                if (activeSheet) {
+                    // Append to existing content with a newline
+                    const newContent = activeSheet.content
+                        ? `${activeSheet.content}\n${e.detail.content}`
+                        : e.detail.content;
+
+                    // Update the sheet content
+                    setSheetsByMode(prev => ({
+                        ...prev,
+                        [activeMode]: prev[activeMode].map(s =>
+                            s.id === currentActiveSheetId
+                                ? { ...s, content: newContent }
+                                : s
+                        )
+                    }));
+                }
+            }
+        };
+        window.addEventListener('paste-to-sheet' as any, handlePasteEvent);
+
         return () => {
             window.removeEventListener('storage', handleRemoteJump);
             window.removeEventListener('big-data-jump' as any, handleRemoteJump);
+            window.removeEventListener('paste-to-sheet' as any, handlePasteEvent);
         };
     }, []);
 
@@ -562,7 +590,7 @@ const BigDataConsole = ({ handleAIAction, activeMode, setActiveMode }: { handleA
             <div className="absolute inset-0 bg-[#D4AF37]/5 blur-[120px] pointer-events-none animate-pulse" />
 
             {/* Header / Tabs */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between mt-6 mb-4 px-2 gap-4 md:gap-2">
+            <div className="flex flex-col md:flex-row md:items-center justify-between mt-2 md:mt-6 mb-2 md:mb-4 px-2 gap-2 md:gap-2">
                 <div className="flex flex-col gap-2 w-full md:flex-1 overflow-hidden">
                     <div className="flex items-center justify-between md:hidden px-1">
                         <span className="text-[9px] font-black text-zinc-600 uppercase tracking-widest">Active Sheets</span>
@@ -609,15 +637,15 @@ const BigDataConsole = ({ handleAIAction, activeMode, setActiveMode }: { handleA
                 </div>
 
                 <div className="flex items-center justify-between md:justify-end gap-1.5 md:gap-3 w-full md:w-auto pt-1 md:pt-0 border-t border-white/5 md:border-none">
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-2 md:gap-1.5">
                         <Button
                             variant="ghost"
                             size="sm"
                             onClick={clearContent}
-                            className="rounded-xl border border-white/5 text-zinc-500 hover:text-red-400 px-3 h-9"
+                            className="rounded-xl border border-white/5 text-zinc-500 hover:text-red-400 px-3 md:px-3 h-10 md:h-9 hover:bg-red-500/10 hover:border-red-500/30 transition-all"
                             title="Clear Sheet"
                         >
-                            <Trash2 className="w-4 h-4 md:mr-2" />
+                            <Trash2 className="w-5 h-5 md:w-4 md:h-4 md:mr-2" />
                             <span className="hidden md:inline">Clear</span>
                         </Button>
                         <Button
@@ -625,25 +653,25 @@ const BigDataConsole = ({ handleAIAction, activeMode, setActiveMode }: { handleA
                             size="sm"
                             onClick={handleUndo}
                             disabled={historyIndex <= 0}
-                            className="rounded-xl border border-white/5 text-zinc-500 hover:text-white px-3 h-9"
+                            className="rounded-xl border border-white/5 text-zinc-500 hover:text-white px-3 md:px-3 h-10 md:h-9 hover:bg-white/10 hover:border-white/20 transition-all"
                             title="Undo"
                         >
-                            <RotateCcw className="w-4 h-4 md:mr-2" />
+                            <RotateCcw className="w-5 h-5 md:w-4 md:h-4 md:mr-2" />
                             <span className="hidden md:inline">Undo</span>
                         </Button>
                         <Button
                             variant="ghost"
                             size="sm"
                             onClick={handlePasteContent}
-                            className="rounded-xl border border-white/5 text-[#D4AF37] hover:bg-[#D4AF37]/10 px-3 h-9"
+                            className="rounded-xl border border-[#D4AF37]/20 bg-[#D4AF37]/5 text-[#D4AF37] hover:bg-[#D4AF37]/20 hover:border-[#D4AF37]/40 px-3 md:px-3 h-10 md:h-9 shadow-[0_0_12px_rgba(212,175,55,0.15)] hover:shadow-[0_0_20px_rgba(212,175,55,0.3)] transition-all"
                             title="Paste Content"
                         >
-                            <ClipboardPaste className="w-4 h-4 md:mr-2" />
+                            <ClipboardPaste className="w-5 h-5 md:w-4 md:h-4 md:mr-2" />
                             <span className="hidden md:inline font-black uppercase text-[10px]">Paste</span>
                         </Button>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="hidden md:flex items-center gap-2">
                         <Button
                             variant="outline"
                             size="sm"
@@ -653,13 +681,12 @@ const BigDataConsole = ({ handleAIAction, activeMode, setActiveMode }: { handleA
                         >
                             <Wand2 className={cn("w-3.5 h-3.5 md:mr-2", isFixing && "animate-spin")} />
                             <span className="hidden md:inline">Optimize Prompt</span>
-                            <span className="md:hidden">Optimize</span>
                         </Button>
                         <Button
                             variant="ghost"
                             size="sm"
                             onClick={() => setIsFocusMode(!isFocusMode)}
-                            className="hidden md:flex rounded-xl border-white/10 text-[10px] font-black uppercase tracking-widest h-9"
+                            className="rounded-xl border-white/10 text-[10px] font-black uppercase tracking-widest h-9"
                         >
                             {isFocusMode ? <Minimize2 className="w-3 h-3 mr-2" /> : <Maximize2 className="w-3 h-3 mr-2" />}
                             {isFocusMode ? 'Exit Focus' : 'Focus'}

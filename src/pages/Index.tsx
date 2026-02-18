@@ -6,12 +6,19 @@ import { CategoryManageModal } from '@/components/CategoryManageModal';
 import { AuthModal } from '@/components/AuthModal';
 import { ReminderDialog } from '@/components/ReminderDialog';
 import { OnboardingWizard } from '@/components/OnboardingWizard';
+import { InfoIcon } from '@/components/InfoIcon';
+import { UseCaseCard } from '@/components/UseCaseCard';
+import { UseCaseModal } from '@/components/UseCaseModal';
+import { GuestWarningDialog } from '@/components/GuestWarningDialog';
+import { MigrationDialog } from '@/components/MigrationDialog';
 import { supabase } from "@/integrations/supabase/client";
 import { User } from '@supabase/supabase-js';
 import BigDataConsole from '@/components/BigDataConsole';
 import { Task, AIAction, Category, TagType } from '@/types/task';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { cn } from '@/lib/utils';
+import * as supabaseSync from '@/lib/supabaseSync';
+import * as guestDataUtils from '@/lib/guestDataUtils';
 import * as LucideIcons from 'lucide-react';
 import { isToday, isTomorrow, isAfter, startOfToday, parseISO, addDays, format, startOfWeek, isSameDay, subDays } from 'date-fns';
 import { DayPicker } from 'react-day-picker';
@@ -41,7 +48,8 @@ import {
     Database,
     FileText,
     Check,
-    Pencil
+    Pencil,
+    Clipboard
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
@@ -66,13 +74,8 @@ import {
 
 
 const Index = () => {
-    const [basicTasks, setBasicTasks] = useLocalStorage<Task[]>('taskflow-tasks-basic', [
-        { id: '1', text: 'Clean Basic Task', completed: false, createdAt: Date.now() }
-    ]);
-    const [advancedTasks, setAdvancedTasks] = useLocalStorage<Task[]>('taskflow-tasks-advanced', [
-        { id: '1', text: 'Analyze any.do interface', completed: false, createdAt: Date.now() },
-        { id: '2', text: 'Build premium React components', completed: true, createdAt: Date.now() }
-    ]);
+    const [basicTasks, setBasicTasks] = useLocalStorage<Task[]>('taskflow-tasks-basic', []);
+    const [advancedTasks, setAdvancedTasks] = useLocalStorage<Task[]>('taskflow-tasks-advanced', []);
 
     const [appMode, setAppMode] = useLocalStorage<'basic' | 'advanced' | 'big-data'>('app-mode', 'advanced');
 
@@ -81,7 +84,12 @@ const Index = () => {
         { id: 'cat-2', name: 'Work', icon: 'Briefcase', color: '#10b981' },
         { id: 'cat-3', name: 'Mission', icon: 'Target', color: '#f59e0b' },
         { id: 'cat-4', name: 'Education', icon: 'GraduationCap', color: '#8b5cf6' },
-        { id: 'cat-5', name: 'Health', icon: 'HeartPulse', color: '#ef4444' }
+        { id: 'cat-5', name: 'Health', icon: 'HeartPulse', color: '#ef4444' },
+        { id: 'cat-6', name: 'Finance', icon: 'Wallet', color: '#14b8a6' },
+        { id: 'cat-7', name: 'Shopping', icon: 'ShoppingCart', color: '#ec4899' },
+        { id: 'cat-8', name: 'Home', icon: 'Home', color: '#f97316' },
+        { id: 'cat-9', name: 'Travel', icon: 'Plane', color: '#06b6d4' },
+        { id: 'cat-10', name: 'Hobby', icon: 'Palette', color: '#a855f7' }
     ]);
 
     const [availableTags, setAvailableTags] = useLocalStorage<TagType[]>('task-tags', [
@@ -92,7 +100,11 @@ const Index = () => {
         { id: 'tag-5', name: 'Personal', color: '#3b82f6' },
         { id: 'tag-6', name: 'Trackback', color: '#10b981' },
         { id: 'tag-7', name: 'Project', color: '#047857' },
-        { id: 'tag-8', name: 'Work', color: '#6366f1' }
+        { id: 'tag-8', name: 'Work', color: '#6366f1' },
+        { id: 'tag-9', name: 'Urgent', color: '#dc2626' },
+        { id: 'tag-10', name: 'Meeting', color: '#8b5cf6' },
+        { id: 'tag-11', name: 'Client', color: '#ec4899' },
+        { id: 'tag-12', name: 'Research', color: '#06b6d4' }
     ]);
 
     const [isManageModalOpen, setIsManageModalOpen] = useState(false);
@@ -124,9 +136,15 @@ const Index = () => {
     const [user, setUser] = useState<User | null>(null);
     const [profile, setProfile] = useState<any>(null);
     const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+    const [pendingMode, setPendingMode] = useState<'advanced' | 'big-data' | null>(null);
     const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
     const [isEditingName, setIsEditingName] = useState(false);
     const [newName, setNewName] = useState('');
+    const [isUseCaseModalOpen, setIsUseCaseModalOpen] = useState(false);
+    const [isUseCasePopoverOpen, setIsUseCasePopoverOpen] = useState(false);
+    const [isGuestWarningOpen, setIsGuestWarningOpen] = useState(false);
+    const [isMigrationOpen, setIsMigrationOpen] = useState(false);
+    const [isMigrationComplete, setIsMigrationComplete] = useState(false);
 
     const [selectedDate, setSelectedDate] = useState<Date>(new Date());
     const [weekStartDate, setWeekStartDate] = useState<Date>(startOfWeek(new Date(), { weekStartsOn: 0 }));
@@ -150,6 +168,15 @@ const Index = () => {
             clearInterval(interval);
         };
     }, []);
+
+    // Auto-activate pending mode after login
+    useEffect(() => {
+        if (user && pendingMode) {
+            setAppMode(pendingMode);
+            setPendingMode(null);
+            toast.success(`${pendingMode === 'advanced' ? 'Advanced' : 'Big Data'} Mode Activated!`);
+        }
+    }, [user, pendingMode]);
 
     const handleTaskJump = (taskId: string) => {
         const task = tasks.find(t => t.id === taskId);
@@ -260,6 +287,124 @@ const Index = () => {
         return () => subscription.unsubscribe();
     }, []);
 
+    // Check and clear expired guest data on mount
+    useEffect(() => {
+        if (!user && guestDataUtils.isGuestDataExpired()) {
+            guestDataUtils.clearGuestData();
+            toast.info('Guest data expired and cleared. Starting fresh!');
+        }
+    }, []);
+
+    // Handle login migration
+    useEffect(() => {
+        // Check if migration already happened in this session
+        const migrationDone = sessionStorage.getItem('migration-completed');
+
+        if (user && guestDataUtils.hasGuestData() && !migrationDone) {
+            // User just logged in and has local guest data
+            const migrateData = async () => {
+                setIsMigrationOpen(true);
+                setIsMigrationComplete(false);
+
+                try {
+                    // Migrate all local data to Supabase
+                    const result = await supabaseSync.migrateLocalDataToSupabase(
+                        user.id,
+                        basicTasks,
+                        advancedTasks,
+                        categories,
+                        availableTags,
+                        bigDataWorkspaces
+                    );
+
+                    if (result.success) {
+                        setIsMigrationComplete(true);
+                        toast.success('Your data is now saved permanently in the cloud!');
+
+                        // Clear guest data state
+                        guestDataUtils.resetGuestWarningState();
+
+                        // Clear ALL localStorage data after migration
+                        guestDataUtils.clearGuestData();
+
+                        // Mark migration as complete in this session
+                        sessionStorage.setItem('migration-completed', 'true');
+
+                        // Close migration dialog after 2 seconds
+                        setTimeout(() => {
+                            setIsMigrationOpen(false);
+                            setIsMigrationComplete(false);
+                        }, 2500);
+                    } else {
+                        toast.error('Migration failed. Your local data is still safe.');
+                        setIsMigrationOpen(false);
+                    }
+                } catch (error) {
+                    console.error('Migration error:', error);
+                    toast.error('Migration failed. Please try logging out and back in.');
+                    setIsMigrationOpen(false);
+                }
+            };
+
+            migrateData();
+        } else if (user && !migrationDone) {
+            // User is logged in but no guest data - load from Supabase
+            const loadCloudData = async () => {
+                try {
+                    const [
+                        cloudBasicTasks,
+                        cloudAdvancedTasks,
+                        cloudCategories,
+                        cloudTags
+                    ] = await Promise.all([
+                        supabaseSync.loadTasksFromSupabase(user.id, 'basic'),
+                        supabaseSync.loadTasksFromSupabase(user.id, 'advanced'),
+                        supabaseSync.loadCategoriesFromSupabase(user.id),
+                        supabaseSync.loadTagsFromSupabase(user.id)
+                    ]);
+
+                    // Update state with cloud data
+                    setBasicTasks(cloudBasicTasks);
+                    setAdvancedTasks(cloudAdvancedTasks);
+                    setCategories(cloudCategories);
+                    setAvailableTags(cloudTags);
+
+                    // Mark as loaded so we don't reload on every render
+                    sessionStorage.setItem('migration-completed', 'true');
+                } catch (error) {
+                    console.error('Error loading cloud data:', error);
+                }
+            };
+
+            loadCloudData();
+        }
+    }, [user]);
+
+    // Auto-sync categories to Supabase
+    useEffect(() => {
+        if (user && categories.length > 0) {
+            supabaseSync.syncCategoriesToSupabase(user.id, categories);
+        }
+    }, [categories, user]);
+
+    // Auto-sync tags to Supabase
+    useEffect(() => {
+        if (user && availableTags.length > 0) {
+            supabaseSync.syncTagsToSupabase(user.id, availableTags);
+        }
+    }, [availableTags, user]);
+
+    // Auto-sync Big Data sheets to Supabase
+    useEffect(() => {
+        if (user && bigDataWorkspaces.length > 0) {
+            supabaseSync.syncSheetsToSupabase(user.id, bigDataWorkspaces);
+        }
+    }, [bigDataWorkspaces, user]);
+
+
+
+
+
     const getGreeting = (date: Date) => {
         const hour = date.getHours();
         if (hour >= 5 && hour < 12) return 'Good Morning';
@@ -357,8 +502,16 @@ const Index = () => {
         brainDump: tasks.filter(t => !t.completed && !t.dueDate).length
     };
 
-    const addTask = (text: string) => {
+    const addTask = async (text: string) => {
         if (!text.trim()) return;
+
+        // Guest user: Show warning on first task
+        if (!user && !guestDataUtils.hasSeenGuestWarning()) {
+            guestDataUtils.initializeGuestDataTimestamp();
+            guestDataUtils.markGuestWarningAsShown();
+            setIsGuestWarningOpen(true);
+        }
+
         const newTask: Task = {
             id: `task-${Date.now()}`,
             text,
@@ -369,7 +522,14 @@ const Index = () => {
                 ? selectedDate.toISOString()
                 : undefined
         };
+
         setTasks(prev => [...prev, newTask]);
+
+        // If logged in, sync to Supabase
+        if (user) {
+            const mode = appMode === 'basic' ? 'basic' : 'advanced';
+            await supabaseSync.syncTasksToSupabase(user.id, [...tasks, newTask], mode);
+        }
 
         const dateStr = appMode === 'advanced' && advancedViewMode === 'day-to-day'
             ? format(selectedDate, 'MMM do')
@@ -377,14 +537,26 @@ const Index = () => {
         toast.success(`Task added to ${dateStr}`);
     };
 
-    const toggleTask = (id: string) => {
-        setTasks(prev => prev.map(t => t.id === id ? { ...t, completed: !t.completed } : t));
+    const toggleTask = async (id: string) => {
+        const updatedTasks = tasks.map(t => t.id === id ? { ...t, completed: !t.completed } : t);
+        setTasks(updatedTasks);
+
+        if (user) {
+            const mode = appMode === 'basic' ? 'basic' : 'advanced';
+            await supabaseSync.syncTasksToSupabase(user.id, updatedTasks, mode);
+        }
     };
 
-    const deleteTask = (id: string) => {
-        setTasks(prev => prev.filter(t => t.id !== id));
+    const deleteTask = async (id: string) => {
+        const updatedTasks = tasks.filter(t => t.id !== id);
+        setTasks(updatedTasks);
         if (selectedTaskId === id) setSelectedTaskId(null);
         toast.error("Task deleted");
+
+        if (user) {
+            const mode = appMode === 'basic' ? 'basic' : 'advanced';
+            await supabaseSync.syncTasksToSupabase(user.id, updatedTasks, mode);
+        }
     };
 
     const handleAIAction = useCallback(async (id: string, action: AIAction | 'selection-ai' | 'big-data-temp', options?: any): Promise<string | string[]> => {
@@ -492,15 +664,21 @@ const Index = () => {
         }
     }, [tasks, selectedLanguage]);
 
-    const updateTask = (id: string, updates: Partial<Task>) => {
+    const updateTask = async (id: string, updates: Partial<Task>) => {
         console.log('🔧 [Update Debug] updateTask called with ID:', id, 'Updates:', updates);
+
+        let updatedTasksList: Task[] = [];
         setTasks(prev => {
-            const newTasks = prev.map(task =>
+            updatedTasksList = prev.map(task =>
                 task.id === id ? { ...task, ...updates } : task
             );
-            console.log('📊 [Update Debug] Updated tasks array:', newTasks);
-            return newTasks;
+            return updatedTasksList;
         });
+
+        if (user && updatedTasksList.length > 0) {
+            const mode = appMode === 'basic' ? 'basic' : 'advanced';
+            await supabaseSync.syncTasksToSupabase(user.id, updatedTasksList, mode);
+        }
     };
 
     const handleUndoTask = useCallback((id: string) => {
@@ -614,7 +792,7 @@ const Index = () => {
                 </div>
 
                 <header className={cn("h-14 md:h-16 flex items-center justify-between border-b border-border bg-background/40 backdrop-blur-xl z-30 sticky top-0 transition-all duration-500", isSidebarOpen ? "px-3 md:px-6" : "px-4 md:px-10")}>
-                    <div className="absolute left-1/2 -translate-x-1/2 md:static md:translate-x-0 flex items-center gap-2 md:gap-6 z-50">
+                    <div className="absolute left-1/2 -translate-x-1/2 md:static md:translate-x-0 flex items-center gap-2 md:gap-3 z-50">
                         <Popover open={isModePopoverOpen} onOpenChange={setIsModePopoverOpen}>
                             <PopoverTrigger asChild>
                                 <div className="flex items-center gap-3 px-6 md:px-10 py-2 bg-zinc-900/90 backdrop-blur-xl border border-[#FACC15]/40 rounded-full shadow-[0_0_25px_rgba(250,204,21,0.2)] cursor-pointer group hover:border-[#FACC15] hover:shadow-[0_0_40px_rgba(250,204,21,0.4)] transition-all duration-500 relative overflow-hidden group/mode">
@@ -641,9 +819,10 @@ const Index = () => {
                                             key={mode.id}
                                             onClick={() => {
                                                 if (mode.id !== 'basic' && !user) {
+                                                    setPendingMode(mode.id as 'advanced' | 'big-data');
                                                     setIsAuthModalOpen(true);
                                                     setIsModePopoverOpen(false);
-                                                    toast.info("Authorization Required");
+                                                    toast.info("Login Required for " + mode.label);
                                                     return;
                                                 }
                                                 setAppMode(mode.id as any);
@@ -666,6 +845,31 @@ const Index = () => {
                                 </div>
                             </PopoverContent>
                         </Popover>
+
+                        {/* Info Icon - Desktop Hover (Outside mode card) */}
+                        <Popover open={isUseCasePopoverOpen} onOpenChange={setIsUseCasePopoverOpen}>
+                            <PopoverTrigger asChild>
+                                <div className="hidden md:block">
+                                    <InfoIcon size={20} />
+                                </div>
+                            </PopoverTrigger>
+                            <PopoverContent
+                                className="p-0 border-0 bg-transparent shadow-none w-auto"
+                                align="start"
+                                side="bottom"
+                                sideOffset={8}
+                            >
+                                <UseCaseCard mode={appMode} />
+                            </PopoverContent>
+                        </Popover>
+
+                        {/* Info Icon - Mobile Click (Outside mode card) */}
+                        <div
+                            className="md:hidden"
+                            onClick={() => setIsUseCaseModalOpen(true)}
+                        >
+                            <InfoIcon size={18} />
+                        </div>
                     </div>
 
                     <div className="flex items-center gap-3">
@@ -689,7 +893,7 @@ const Index = () => {
                                         </div>
                                     )}
                                     <div className="flex flex-col items-start cursor-default group/hero">
-                                        <h1 className="text-3xl md:text-5xl font-black text-foreground tracking-tight leading-none font-sans hover:translate-x-1 transition-all duration-500 hover:text-white dark:hover:drop-shadow-[0_0_15px_rgba(255,255,255,0.3)] text-left">
+                                        <h1 className="text-3xl md:text-4xl font-black text-foreground tracking-tight leading-none font-sans hover:translate-x-1 transition-all duration-500 hover:text-white dark:hover:drop-shadow-[0_0_15px_rgba(255,255,255,0.3)] text-left">
                                             {getGreeting(currentTime)}<span className="text-primary group-hover/hero:animate-pulse">.</span>
                                         </h1>
                                         <div className="flex items-center gap-2 opacity-60 hover:opacity-100 transition-all duration-500 group/name justify-start">
@@ -1223,11 +1427,23 @@ const Index = () => {
             />
 
             <CategoryManageModal isOpen={isManageModalOpen} onOpenChange={setIsManageModalOpen} type={manageType} categories={categories} setCategories={setCategories} tags={availableTags} setTags={setAvailableTags} onRenameItem={handleRenameItem} onDeleteItem={handleDeleteItem} />
-            <AuthModal isOpen={isAuthModalOpen} onClose={() => setIsAuthModalOpen(false)} />
+            <AuthModal isOpen={isAuthModalOpen} onClose={() => { setIsAuthModalOpen(false); setPendingMode(null); }} />
             {user && <OnboardingWizard isOpen={isOnboardingOpen} userId={user.id} onComplete={() => { setIsOnboardingOpen(false); fetchProfile(user.id); }} />}
 
+            {/* Use Case Modal for Mobile */}
+            <UseCaseModal
+                mode={appMode}
+                isOpen={isUseCaseModalOpen}
+                onClose={() => setIsUseCaseModalOpen(false)}
+            />
+
             {/* Mobile Bottom Navigation Bar */}
-            <div className="md:hidden fixed bottom-6 left-4 right-4 h-16 bg-black/80 backdrop-blur-2xl border border-white/10 rounded-[2rem] z-[100] flex items-center justify-between px-6 shadow-2xl transition-transform duration-500 animate-in slide-in-from-bottom-10 fade-in fill-mode-both">
+            <div className={cn(
+                "md:hidden fixed bottom-6 left-4 right-4 h-16 bg-black/80 backdrop-blur-2xl border border-white/10 rounded-[2rem] z-[100] flex items-center justify-between px-6 shadow-2xl transition-all duration-500",
+                selectedTaskId
+                    ? "translate-y-32 opacity-0 pointer-events-none"
+                    : "translate-y-0 opacity-100"
+            )}>
                 <button onClick={() => { handleRefresh(); document.getElementById('main-content-area')?.scrollTo({ top: 0, behavior: 'smooth' }); }} className="flex flex-col items-center gap-1 group">
                     <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center group-hover:bg-[#FACC15] transition-colors">
                         <RefreshCw className={cn("w-4 h-4 text-zinc-400 group-hover:text-black transition-colors", isRefreshing && "animate-spin")} />
@@ -1258,13 +1474,35 @@ const Index = () => {
                 </button>
 
                 <button
-                    onClick={() => {
-                        const input = document.getElementById('task-input-field');
-                        if (input) input.focus();
+                    onClick={async () => {
+                        if (appMode === 'big-data') {
+                            // Paste from clipboard in Big Data mode
+                            try {
+                                const text = await navigator.clipboard.readText();
+                                if (text.trim()) {
+                                    // Dispatch event to BigDataConsole to paste
+                                    window.dispatchEvent(new CustomEvent('paste-to-sheet', { detail: { content: text } }));
+                                    toast.success('Content pasted to active sheet!');
+                                } else {
+                                    toast.error('Clipboard is empty');
+                                }
+                            } catch (error) {
+                                toast.error('Failed to read clipboard');
+                                console.error('Clipboard error:', error);
+                            }
+                        } else {
+                            // Focus input in other modes
+                            const input = document.getElementById('task-input-field');
+                            if (input) input.focus();
+                        }
                     }}
                     className="relative -top-6 w-14 h-14 bg-[#FACC15] rounded-[1.5rem] flex items-center justify-center shadow-[0_0_30px_rgba(250,204,21,0.4)] border-4 border-black transition-transform active:scale-95"
                 >
-                    <Plus className="w-7 h-7 text-black stroke-[3]" />
+                    {appMode === 'big-data' ? (
+                        <Clipboard className="w-6 h-6 text-black" />
+                    ) : (
+                        <Plus className="w-6 h-6 text-black" />
+                    )}
                 </button>
 
                 <Popover>
@@ -1288,6 +1526,35 @@ const Index = () => {
                     <span className="text-[8px] font-black text-zinc-500 uppercase tracking-widest group-hover:text-[#FACC15]">Menu</span>
                 </button>
             </div>
+
+            {/* Guest Warning Dialog */}
+            <GuestWarningDialog
+                isOpen={isGuestWarningOpen}
+                onClose={() => setIsGuestWarningOpen(false)}
+                onLogin={() => setIsAuthModalOpen(true)}
+            />
+
+            {/* Migration Dialog */}
+            <MigrationDialog
+                isOpen={isMigrationOpen}
+                isComplete={isMigrationComplete}
+            />
+
+            {/* Use Case Modal for Mobile */}
+            <UseCaseModal
+                isOpen={isUseCaseModalOpen}
+                onClose={() => setIsUseCaseModalOpen(false)}
+                mode={appMode}
+            />
+
+            {/* Auth Modal */}
+            <AuthModal
+                isOpen={isAuthModalOpen}
+                onClose={() => {
+                    setIsAuthModalOpen(false);
+                    setPendingMode(null);
+                }}
+            />
         </div>
     );
 };
