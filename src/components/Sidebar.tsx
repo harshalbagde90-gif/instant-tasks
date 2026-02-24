@@ -26,7 +26,8 @@ import {
     Search,
     BarChart3,
     FileText,
-    ArrowLeft
+    ArrowLeft,
+    Layers
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from "@/integrations/supabase/client";
@@ -55,8 +56,8 @@ interface SidebarProps {
     setWidth: (width: number) => void;
     isOpen: boolean;
     setIsOpen: (open: boolean) => void;
-    appMode: 'basic' | 'advanced' | 'big-data';
-    setAppMode: (mode: 'basic' | 'advanced' | 'big-data') => void;
+    appMode: 'basic' | 'advanced' | 'big-data' | 'customize';
+    setAppMode: (mode: 'basic' | 'advanced' | 'big-data' | 'customize') => void;
     onLanguageChange: (lang: string) => void;
     selectedLanguage: string;
     onAuthClick?: () => void;
@@ -67,6 +68,7 @@ interface SidebarProps {
     onProfileUpdate?: () => void;
     // New Props for Task Monitor
     tasks?: any[];
+    customizeTasks?: any[];
     bigDataWorkspaces?: Record<string, any[]>;
     onTaskClick?: (taskId: string) => void;
     onSheetClick?: (mode: string, sheetId: string) => void;
@@ -93,7 +95,8 @@ export function Sidebar({
     tasks = [],
     bigDataWorkspaces = {},
     onTaskClick,
-    onSheetClick
+    onSheetClick,
+    customizeTasks = [],
 }: SidebarProps) {
     const isResizing = useRef(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -104,6 +107,7 @@ export function Sidebar({
     const [isOneDayOpen, setIsOneDayOpen] = useState(true);
     const [isDayToDayOpen, setIsDayToDayOpen] = useState(false);
     const [isBigDataOpen, setIsBigDataOpen] = useState(false);
+    const [isCustomizeOpen, setIsCustomizeOpen] = useState(false);
 
     const startResizing = (e: React.MouseEvent) => {
         isResizing.current = true;
@@ -470,6 +474,61 @@ export function Sidebar({
                                             })}
                                             {bigDataSheetsCount === 0 && (
                                                 <div className="py-2 text-[9px] font-black text-zinc-700 uppercase italic">No Active Sheets</div>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* CUSTOMIZE TASK DROPDOWN */}
+                                <div className="space-y-1">
+                                    <button
+                                        onClick={() => setIsCustomizeOpen(!isCustomizeOpen)}
+                                        className={cn(
+                                            "w-full flex items-center justify-between p-3.5 rounded-xl transition-all duration-300 group",
+                                            isCustomizeOpen ? "bg-primary/5 text-white border border-primary/20" : "text-zinc-500 hover:bg-white/[0.02] hover:text-zinc-300 border border-transparent"
+                                        )}
+                                    >
+                                        <div className="flex items-center gap-3.5">
+                                            <Layers className={cn("w-4 h-4 transition-all", isCustomizeOpen ? "text-primary scale-110" : "group-hover:text-zinc-300")} />
+                                            <span className="text-[11px] font-black tracking-widest uppercase">Customize Task</span>
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                            <div className={cn(
+                                                "w-6 h-6 rounded-full flex items-center justify-center text-[9px] font-black border transition-all duration-500 shadow-[0_0_15px_rgba(212,175,55,0.2)]",
+                                                isCustomizeOpen ? "bg-primary text-black border-primary scale-110" : "bg-black border-white/10 text-zinc-500"
+                                            )}>
+                                                {customizeTasks.length}
+                                            </div>
+                                            <ChevronRight className={cn("w-3.5 h-3.5 transition-transform duration-300", isCustomizeOpen && "rotate-90 text-primary")} />
+                                        </div>
+                                    </button>
+
+                                    {isCustomizeOpen && (
+                                        <div className="space-y-0.5 mt-2 ml-4 pl-4 border-l border-white/5 animate-in slide-in-from-top-2 duration-300">
+                                            {customizeTasks.length > 0 ? customizeTasks.slice(0, 12).map((task: any) => (
+                                                <button
+                                                    key={task.id}
+                                                    onClick={() => onTaskClick?.(task.id)}
+                                                    className="w-full flex items-center gap-3 py-1.5 px-2 rounded-lg text-zinc-500 hover:text-white hover:bg-white/[0.03] transition-all group/item text-left overflow-hidden"
+                                                >
+                                                    <div className={cn(
+                                                        "w-1 h-1 rounded-full transition-all flex-shrink-0",
+                                                        task.completed ? "bg-zinc-700" : "bg-primary shadow-[0_0_5px_rgba(212,175,55,0.5)] group-hover/item:scale-125"
+                                                    )} />
+                                                    <span className={cn(
+                                                        "text-[9.5px] font-bold truncate uppercase tracking-tight flex-1",
+                                                        task.completed && "line-through opacity-30"
+                                                    )} title={task.text}>
+                                                        {task.text}
+                                                    </span>
+                                                    {(task.subtasks?.length || 0) > 0 && (
+                                                        <span className="text-[8px] text-primary/40 font-black flex-shrink-0">
+                                                            {task.subtasks.filter((s: any) => s.completed).length}/{task.subtasks.length}
+                                                        </span>
+                                                    )}
+                                                </button>
+                                            )) : (
+                                                <div className="py-1 px-2 text-[8px] font-black text-zinc-800 uppercase italic">No Custom Missions</div>
                                             )}
                                         </div>
                                     )}

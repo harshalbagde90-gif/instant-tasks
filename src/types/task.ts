@@ -1,3 +1,10 @@
+export interface Subtask {
+  id: string;
+  text: string;
+  completed: boolean;
+  tags?: string[];
+}
+
 export interface Task {
   id: string;
   text: string;
@@ -5,19 +12,21 @@ export interface Task {
   createdAt: number;
   description?: string;
   dueDate?: string;
+  deadline?: string;
   priority?: 'low' | 'medium' | 'high' | 'urgent';
   color?: string;
   estimatedTime?: string;
   category?: string;
   tags?: string[];
   notes?: string;
-  subtasks?: { id: string; text: string; completed: boolean }[];
+  subtasks?: Subtask[];
   attachments?: { id: string; name: string; url: string }[];
   reminder?: string;
   emailReminderEnabled?: boolean;
   whatsappReminderEnabled?: boolean;
   previousText?: string;
 }
+
 
 export interface Template {
   id: string;

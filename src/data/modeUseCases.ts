@@ -132,6 +132,39 @@ export const modeUseCases = {
                 description: "Save frequently used templates for quick access"
             }
         ]
+    },
+    customize: {
+        title: "Customize Task",
+        subtitle: "Main tasks with subtasks, progress & deadlines",
+        icon: "Layers",
+        color: "#8B5CF6",
+        useCases: [
+            {
+                emoji: "📋",
+                title: "Subtask Breakdown",
+                description: "Break any mission into subtasks and track each one independently"
+            },
+            {
+                emoji: "📊",
+                title: "Progress Tracking",
+                description: "See completion % calculated automatically as subtasks are done"
+            },
+            {
+                emoji: "⏰",
+                title: "Deadline Countdown",
+                description: "Set deadlines and see live countdowns with green/yellow/red alerts"
+            },
+            {
+                emoji: "🏷️",
+                title: "Tags & Categories",
+                description: "Assign categories, priority levels, and tags to each task"
+            },
+            {
+                emoji: "🔔",
+                title: "Smart Reminders",
+                description: "Set reminders per task and stay on top of critical deadlines"
+            }
+        ]
     }
 } as const;
 

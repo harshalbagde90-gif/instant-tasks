@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Trash2, Edit2, Check, Sparkles, Wand2, History, Maximize2, Minimize2, Split, FileText, Highlighter, Palette, Type, Bold, Italic, Link, RotateCcw, ClipboardPaste } from 'lucide-react';
+import { Plus, Trash2, Edit2, Check, Sparkles, History, Maximize2, Minimize2, Split, FileText, Highlighter, Palette, Type, Bold, Italic, Link, RotateCcw, ClipboardPaste } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from './ui/button';
 import { toast } from 'sonner';
@@ -329,28 +329,7 @@ const BigDataConsole = ({ handleAIAction, activeMode, setActiveMode }: { handleA
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [history, historyIndex]);
 
-    const optimizePrompt = async () => {
-        if (!activeSheet.content.trim()) return;
-        if (aiUsageCount >= AI_LIMIT) {
-            toast.error("AI Daily Limit Reached (20/20)");
-            return;
-        }
-        setIsFixing(true);
-        try {
-            const result = await handleAIAction('big-data-temp', 'improve', { text: activeSheet.content, mode: activeMode });
-            if (result && result !== "__NO_CHANGE__") {
-                handleContentChange(result);
-                setAiUsageCount(prev => prev + 1);
-                toast.success(`Prompt Optimized by Gemini (${aiUsageCount + 1}/${AI_LIMIT})`);
-            } else {
-                toast.info("Already Optimized");
-            }
-        } catch (e) {
-            toast.error("AI Refinement Failed");
-        } finally {
-            setIsFixing(false);
-        }
-    };
+
 
     const handleAIEdit = async (instruction: string) => {
         if (!selection || !textareaRef.current) return;
@@ -485,7 +464,7 @@ const BigDataConsole = ({ handleAIAction, activeMode, setActiveMode }: { handleA
 
         const getVibrantColor = (c: string) => {
             const colors: any = { gold: "#D4AF37", red: "#FF4D4D", green: "#2ECC71", blue: "#3498DB", purple: "#9B59B6", cyan: "#00E5FF" };
-            return colors[c] || "#ffffff";
+            return colors[c] || "inherit";
         };
 
         const chunks: { text: string, style: any }[] = [];
@@ -494,7 +473,7 @@ const BigDataConsole = ({ handleAIAction, activeMode, setActiveMode }: { handleA
 
         for (let i = 0; i < text.length; i++) {
             const char = text[i];
-            const style: any = { color: '#ffffff' }; // Normal text is pure white
+            const style: any = { color: 'inherit' }; // Inherit from parent (text-foreground in light, white in dark)
 
             const bgObj = styles.bg.find(b => i >= b.range[0] && i < b.range[1]);
             if (bgObj) {
@@ -559,7 +538,7 @@ const BigDataConsole = ({ handleAIAction, activeMode, setActiveMode }: { handleA
                     <div className="w-[1px] h-6 bg-white/10 mx-1" />
                     <button
                         onClick={() => setSelection(null)}
-                        className="px-4 py-2 text-[10px] font-bold text-zinc-500 hover:text-white transition-colors"
+                        className="px-4 py-2 text-[10px] font-bold text-muted-foreground hover:text-foreground transition-colors"
                     >
                         Cancel
                     </button>
@@ -569,15 +548,15 @@ const BigDataConsole = ({ handleAIAction, activeMode, setActiveMode }: { handleA
             {/* Slash Menu */}
             {showSlashMenu && (
                 <div
-                    className="absolute z-[110] bg-[#0a0a0a] border border-white/10 rounded-2xl shadow-2xl p-2 w-48 animate-in fade-in zoom-in duration-200"
+                    className="absolute z-[110] bg-card border border-border rounded-2xl shadow-2xl p-2 w-48 animate-in fade-in zoom-in duration-200"
                     style={{ top: menuPos.top, left: menuPos.left }}
                 >
-                    <div className="text-[9px] font-black text-zinc-500 uppercase px-3 py-1 tracking-widest">Global Templates</div>
+                    <div className="text-[9px] font-black text-muted-foreground uppercase px-3 py-1 tracking-widest">Global Templates</div>
                     {templates.map(t => (
                         <button
                             key={t.label}
                             onClick={() => insertTemplate(t.content)}
-                            className="w-full text-left px-3 py-2 rounded-xl hover:bg-white/5 text-xs font-bold text-zinc-300 transition-colors flex items-center gap-2"
+                            className="w-full text-left px-3 py-2 rounded-xl hover:bg-muted text-xs font-bold text-foreground transition-colors flex items-center gap-2"
                         >
                             <FileText className="w-3 h-3 text-primary" />
                             {t.label}
@@ -663,25 +642,15 @@ const BigDataConsole = ({ handleAIAction, activeMode, setActiveMode }: { handleA
                             variant="ghost"
                             size="sm"
                             onClick={handlePasteContent}
-                            className="rounded-xl border border-[#D4AF37]/20 bg-[#D4AF37]/5 text-[#D4AF37] hover:bg-[#D4AF37]/20 hover:border-[#D4AF37]/40 px-3 md:px-3 h-10 md:h-9 shadow-[0_0_12px_rgba(212,175,55,0.15)] hover:shadow-[0_0_20px_rgba(212,175,55,0.3)] transition-all"
+                            className="rounded-xl border-2 border-primary/60 bg-primary/15 text-primary hover:bg-primary/30 hover:border-primary/80 px-4 md:px-5 h-10 md:h-9 shadow-[0_0_20px_rgba(212,175,55,0.35)] hover:shadow-[0_0_30px_rgba(212,175,55,0.55)] transition-all font-black uppercase tracking-widest text-[10px]"
                             title="Paste Content"
                         >
-                            <ClipboardPaste className="w-5 h-5 md:w-4 md:h-4 md:mr-2" />
-                            <span className="hidden md:inline font-black uppercase text-[10px]">Paste</span>
+                            <ClipboardPaste className="w-5 h-5 md:w-4 md:h-4 mr-2" />
+                            <span className="font-black uppercase text-[10px]">Paste</span>
                         </Button>
                     </div>
 
                     <div className="hidden md:flex items-center gap-2">
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={optimizePrompt}
-                            disabled={isFixing}
-                            className="rounded-xl border-primary bg-primary text-black md:text-primary md:bg-primary/5 md:border-primary/20 text-[10px] md:text-[11px] font-black uppercase tracking-widest hover:bg-primary/20 px-3 md:px-6 h-9 shadow-[0_0_15px_rgba(212,175,55,0.2)] md:shadow-none transition-all"
-                        >
-                            <Wand2 className={cn("w-3.5 h-3.5 md:mr-2", isFixing && "animate-spin")} />
-                            <span className="hidden md:inline">Optimize Prompt</span>
-                        </Button>
                         <Button
                             variant="ghost"
                             size="sm"
@@ -696,7 +665,7 @@ const BigDataConsole = ({ handleAIAction, activeMode, setActiveMode }: { handleA
             </div>
 
             {/* Main Console Area */}
-            <div className="flex-1 relative bg-[#050505]/80 backdrop-blur-xl border-2 border-white/5 rounded-none overflow-hidden flex flex-col group/console shadow-2xl">
+            <div className="flex-1 relative bg-card/95 backdrop-blur-xl border-2 border-border rounded-none overflow-hidden flex flex-col group/console shadow-2xl">
                 {/* Visual Accent */}
                 <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-primary/50 to-transparent z-20" />
 
@@ -704,7 +673,7 @@ const BigDataConsole = ({ handleAIAction, activeMode, setActiveMode }: { handleA
                     {/* Gutter (Line Numbers) */}
                     <div
                         ref={gutterRef}
-                        className="w-14 bg-white/[0.02] border-r border-white/10 flex flex-col select-none overflow-hidden text-primary/30 font-mono text-[10px] tabular-nums leading-[26px]"
+                        className="w-14 bg-muted/50 border-r border-border flex flex-col select-none overflow-hidden text-primary/30 font-mono text-[10px] tabular-nums leading-[26px]"
                     >
                         <div className="pt-0">
                             {Array.from({ length: Math.max(lineCount, 30) }).map((_, i) => (
@@ -736,7 +705,7 @@ const BigDataConsole = ({ handleAIAction, activeMode, setActiveMode }: { handleA
                                 </div>
                                 <button
                                     onClick={() => setIsDiffMode(false)}
-                                    className="absolute top-4 right-4 p-2 bg-white/5 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-white/10 z-20"
+                                    className="absolute top-4 right-4 p-2 bg-muted rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-muted/80 z-20"
                                 >
                                     Close Diff
                                 </button>
@@ -775,7 +744,7 @@ const BigDataConsole = ({ handleAIAction, activeMode, setActiveMode }: { handleA
                                 {/* Syntax Mirror (Visible behind textarea) */}
                                 <div
                                     ref={mirrorRef}
-                                    className="absolute inset-0 flex-1 w-full px-6 py-0 text-sm font-medium font-mono leading-[26px] text-white whitespace-pre-wrap break-words overflow-hidden pointer-events-none z-0"
+                                    className="absolute inset-0 flex-1 w-full px-6 py-0 text-sm font-medium font-mono leading-[26px] text-foreground whitespace-pre-wrap break-words overflow-hidden pointer-events-none z-0"
                                     style={{
                                         lineHeight: `${rowHeight}px`,
                                         backgroundImage: 'linear-gradient(to bottom, rgba(212,175,55,0.05) 1px, transparent 1px)',
@@ -814,10 +783,10 @@ const BigDataConsole = ({ handleAIAction, activeMode, setActiveMode }: { handleA
                 </div>
 
                 {/* Footer / Status Bar */}
-                <div className="h-10 md:h-12 bg-white/[0.03] border-t border-white/5 px-3 md:px-6 flex items-center justify-between z-10 overflow-x-auto no-scrollbar scroll-smooth">
+                <div className="h-10 md:h-12 bg-muted/40 border-t border-border px-3 md:px-6 flex items-center justify-between z-10 overflow-x-auto no-scrollbar scroll-smooth">
                     <div className="flex items-center gap-4 md:gap-6 min-w-max">
                         <div className="flex items-center gap-1.5">
-                            <span className="text-[8px] md:text-[9px] font-black text-zinc-600 uppercase tracking-widest">Rows:</span>
+                            <span className="text-[8px] md:text-[9px] font-black text-muted-foreground uppercase tracking-widest">Rows:</span>
                             <span className="text-[8px] md:text-[9px] font-bold text-primary">{lineCount}</span>
                         </div>
                         <div className="flex items-center gap-1.5 md:hidden">

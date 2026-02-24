@@ -55,6 +55,39 @@ export type Database = {
           }
         ]
       }
+      shared_tasks: {
+        Row: {
+          id: string
+          share_token: string
+          owner_id: string | null
+          task_data: Json
+          checked_subtasks: string[]
+          mode: string
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          share_token?: string
+          owner_id?: string | null
+          task_data: Json
+          checked_subtasks?: string[]
+          mode?: string
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          share_token?: string
+          owner_id?: string | null
+          task_data?: Json
+          checked_subtasks?: string[]
+          mode?: string
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

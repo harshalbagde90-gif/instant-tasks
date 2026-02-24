@@ -6,42 +6,51 @@
 
 @layer base {
   :root {
-    --background: 160 30% 99%;
-    --foreground: 160 20% 10%;
+    --background: 40 30% 97%;
+    /* Warm cream — not cold white */
+    --foreground: 30 25% 10%;
+    /* Warm dark brown-black */
 
-    --card: 0 0% 100%;
-    --card-foreground: 160 20% 10%;
+    --card: 40 20% 99%;
+    /* Warm white card */
+    --card-foreground: 30 25% 10%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 160 20% 10%;
+    --popover: 40 20% 99%;
+    --popover-foreground: 30 25% 10%;
 
-    --primary: 160 84% 39%;
-    /* Teal Green for Light Mode */
+    --primary: 38 92% 45%;
+    /* Deep Amber #D97706 — matches dark mode golden identity */
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 160 20% 96%;
-    --secondary-foreground: 160 20% 10%;
+    --secondary: 40 18% 95%;
+    /* Warm secondary bg */
+    --secondary-foreground: 30 20% 20%;
 
-    --muted: 160 10% 94%;
-    --muted-foreground: 160 10% 40%;
+    --muted: 40 15% 93%;
+    /* Soft warm gray */
+    --muted-foreground: 30 12% 40%;
+    /* Warm muted text */
 
-    --accent: 160 84% 95%;
-    --accent-foreground: 160 84% 20%;
+    --accent: 38 90% 93%;
+    /* Light amber tint */
+    --accent-foreground: 30 60% 20%;
 
     --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 160 15% 90%;
-    --input: 160 15% 90%;
-    --ring: 160 84% 39%;
+    --border: 38 20% 88%;
+    /* Amber-tinted border */
+    --input: 38 20% 88%;
+    --ring: 38 92% 45%;
 
     --radius: 1.25rem;
 
     --font-sans: 'Outfit', 'Inter', ui-sans-serif, system-ui;
 
-    --sidebar-background: 0 0% 100%;
-    --sidebar-foreground: 160 10% 20%;
-    --sidebar-border: 160 15% 92%;
+    --sidebar-background: 40 20% 98%;
+    /* Warm sidebar */
+    --sidebar-foreground: 30 15% 20%;
+    --sidebar-border: 38 15% 90%;
   }
 
   .dark {
@@ -280,7 +289,7 @@
   color: #ffffff;
 }
 
-/* Global Premium Scrollbar */
+/* Global Premium Scrollbar — Dark Mode */
 ::-webkit-scrollbar {
   width: 8px;
 }
@@ -297,6 +306,20 @@
 
 ::-webkit-scrollbar-thumb:hover {
   background: hsl(var(--primary));
+}
+
+/* Light Mode Scrollbar Override */
+:root:not(.dark) ::-webkit-scrollbar-track {
+  background: hsl(40 20% 94%);
+}
+
+:root:not(.dark) ::-webkit-scrollbar-thumb {
+  background: hsl(38 30% 78%);
+  border: 2px solid hsl(40 20% 94%);
+}
+
+:root:not(.dark) ::-webkit-scrollbar-thumb:hover {
+  background: hsl(38 92% 45%);
 }
 
 .cyber-shine {

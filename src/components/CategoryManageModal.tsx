@@ -193,9 +193,9 @@ export function CategoryManageModal({
                             <div className="flex gap-2.5 pt-1">
                                 <Button
                                     onClick={handleSave}
-                                    className="flex-1 bg-primary hover:bg-primary/90 text-white font-black uppercase tracking-widest text-[10px] rounded-xl h-10 shadow-lg shadow-primary/10"
+                                    className="flex-1 bg-primary hover:bg-primary/90 text-black font-black uppercase tracking-widest text-[10px] rounded-xl h-10 shadow-lg shadow-primary/20"
                                 >
-                                    {editId ? 'Update' : 'Generate'}
+                                    {editId ? '✓ Update' : '+ Generate'}
                                 </Button>
                                 {editId && (
                                     <Button

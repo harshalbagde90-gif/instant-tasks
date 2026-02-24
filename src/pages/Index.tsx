@@ -14,6 +14,7 @@ import { MigrationDialog } from '@/components/MigrationDialog';
 import { supabase } from "@/integrations/supabase/client";
 import { User } from '@supabase/supabase-js';
 import BigDataConsole from '@/components/BigDataConsole';
+import { CustomizeTaskView } from '@/components/CustomizeTaskView';
 import { Task, AIAction, Category, TagType } from '@/types/task';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { cn } from '@/lib/utils';
@@ -73,47 +74,66 @@ import {
 } from "@/components/ui/popover";
 
 
+const DEFAULT_CATEGORIES: Category[] = [
+    { id: 'cat-1', name: 'Personal', icon: 'User', color: '#3b82f6' },
+    { id: 'cat-2', name: 'Work', icon: 'Briefcase', color: '#10b981' },
+    { id: 'cat-3', name: 'Mission', icon: 'Target', color: '#f59e0b' },
+    { id: 'cat-4', name: 'Education', icon: 'GraduationCap', color: '#8b5cf6' },
+    { id: 'cat-5', name: 'Health', icon: 'HeartPulse', color: '#ef4444' },
+    { id: 'cat-6', name: 'Finance', icon: 'Wallet', color: '#14b8a6' },
+    { id: 'cat-7', name: 'Shopping', icon: 'ShoppingCart', color: '#ec4899' },
+    { id: 'cat-8', name: 'Home', icon: 'Home', color: '#f97316' },
+    { id: 'cat-9', name: 'Travel', icon: 'Plane', color: '#06b6d4' },
+    { id: 'cat-10', name: 'Hobby', icon: 'Palette', color: '#a855f7' },
+];
+
+const DEFAULT_TAGS: TagType[] = [
+    { id: 'tag-1', name: 'Priority', color: '#fbbf24' },
+    { id: 'tag-2', name: 'Important', color: '#ef4444' },
+    { id: 'tag-3', name: 'Family', color: '#fb923c' },
+    { id: 'tag-4', name: 'Deadline', color: '#ca8a04' },
+    { id: 'tag-5', name: 'Personal', color: '#3b82f6' },
+    { id: 'tag-6', name: 'Trackback', color: '#10b981' },
+    { id: 'tag-7', name: 'Project', color: '#047857' },
+    { id: 'tag-8', name: 'Work', color: '#6366f1' },
+    { id: 'tag-9', name: 'Urgent', color: '#dc2626' },
+    { id: 'tag-10', name: 'Meeting', color: '#8b5cf6' },
+    { id: 'tag-11', name: 'Client', color: '#ec4899' },
+    { id: 'tag-12', name: 'Research', color: '#06b6d4' },
+];
+
 const Index = () => {
     const [basicTasks, setBasicTasks] = useLocalStorage<Task[]>('taskflow-tasks-basic', []);
     const [advancedTasks, setAdvancedTasks] = useLocalStorage<Task[]>('taskflow-tasks-advanced', []);
+    const [customizeTasks, setCustomizeTasks] = useLocalStorage<Task[]>('taskflow-tasks-customize', []);
 
-    const [appMode, setAppMode] = useLocalStorage<'basic' | 'advanced' | 'big-data'>('app-mode', 'advanced');
+    const [appMode, setAppMode] = useLocalStorage<'basic' | 'advanced' | 'big-data' | 'customize'>('app-mode', 'advanced');
 
-    const [categories, setCategories] = useLocalStorage<Category[]>('task-categories', [
-        { id: 'cat-1', name: 'Personal', icon: 'User', color: '#3b82f6' },
-        { id: 'cat-2', name: 'Work', icon: 'Briefcase', color: '#10b981' },
-        { id: 'cat-3', name: 'Mission', icon: 'Target', color: '#f59e0b' },
-        { id: 'cat-4', name: 'Education', icon: 'GraduationCap', color: '#8b5cf6' },
-        { id: 'cat-5', name: 'Health', icon: 'HeartPulse', color: '#ef4444' },
-        { id: 'cat-6', name: 'Finance', icon: 'Wallet', color: '#14b8a6' },
-        { id: 'cat-7', name: 'Shopping', icon: 'ShoppingCart', color: '#ec4899' },
-        { id: 'cat-8', name: 'Home', icon: 'Home', color: '#f97316' },
-        { id: 'cat-9', name: 'Travel', icon: 'Plane', color: '#06b6d4' },
-        { id: 'cat-10', name: 'Hobby', icon: 'Palette', color: '#a855f7' }
-    ]);
+    const [categories, setCategories] = useLocalStorage<Category[]>('task-categories', DEFAULT_CATEGORIES);
+    const [availableTags, setAvailableTags] = useLocalStorage<TagType[]>('task-tags', DEFAULT_TAGS);
 
-    const [availableTags, setAvailableTags] = useLocalStorage<TagType[]>('task-tags', [
-        { id: 'tag-1', name: 'Priority', color: '#fbbf24' },
-        { id: 'tag-2', name: 'Important', color: '#ef4444' },
-        { id: 'tag-3', name: 'Family', color: '#fb923c' },
-        { id: 'tag-4', name: 'Deadline', color: '#ca8a04' },
-        { id: 'tag-5', name: 'Personal', color: '#3b82f6' },
-        { id: 'tag-6', name: 'Trackback', color: '#10b981' },
-        { id: 'tag-7', name: 'Project', color: '#047857' },
-        { id: 'tag-8', name: 'Work', color: '#6366f1' },
-        { id: 'tag-9', name: 'Urgent', color: '#dc2626' },
-        { id: 'tag-10', name: 'Meeting', color: '#8b5cf6' },
-        { id: 'tag-11', name: 'Client', color: '#ec4899' },
-        { id: 'tag-12', name: 'Research', color: '#06b6d4' }
-    ]);
+    // Auto-restore defaults if categories or tags are empty (e.g., fresh install / cleared storage)
+    useEffect(() => {
+        if (categories.length === 0) {
+            setCategories(DEFAULT_CATEGORIES);
+        }
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+    useEffect(() => {
+        if (availableTags.length === 0) {
+            setAvailableTags(DEFAULT_TAGS);
+        }
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
     const [isManageModalOpen, setIsManageModalOpen] = useState(false);
     const [manageType, setManageType] = useState<'categories' | 'tags'>('categories');
 
-    const tasks = appMode === 'basic' ? basicTasks : advancedTasks;
+    const tasks = appMode === 'basic' ? basicTasks : appMode === 'customize' ? customizeTasks : advancedTasks;
     const setTasks = (val: Task[] | ((prev: Task[]) => Task[])) => {
         if (appMode === 'basic') {
             setBasicTasks(val);
+        } else if (appMode === 'customize') {
+            setCustomizeTasks(val);
         } else {
             setAdvancedTasks(val);
         }
@@ -136,7 +156,7 @@ const Index = () => {
     const [user, setUser] = useState<User | null>(null);
     const [profile, setProfile] = useState<any>(null);
     const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-    const [pendingMode, setPendingMode] = useState<'advanced' | 'big-data' | null>(null);
+    const [pendingMode, setPendingMode] = useState<'advanced' | 'big-data' | 'customize' | null>(null);
     const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
     const [isEditingName, setIsEditingName] = useState(false);
     const [newName, setNewName] = useState('');
@@ -760,6 +780,7 @@ const Index = () => {
                 tags={availableTags}
                 onProfileUpdate={() => user && fetchProfile(user.id)}
                 tasks={tasks}
+                customizeTasks={customizeTasks}
                 bigDataWorkspaces={bigDataWorkspaces}
                 onTaskClick={handleTaskJump}
                 onSheetClick={handleSheetJump}
@@ -800,7 +821,7 @@ const Index = () => {
                                     <LayoutGrid className="w-4 h-4 md:w-5 md:h-5 text-[#FACC15] group-hover:rotate-12 transition-all duration-300" />
                                     <span className="text-[12px] md:text-base font-black text-[#FACC15] tracking-[0.05em] uppercase whitespace-nowrap drop-shadow-[0_0_12px_rgba(250,204,21,0.4)]">
                                         <span className="opacity-40 mr-1.5 font-bold tracking-normal italic normal-case">mode:</span>
-                                        {appMode === 'basic' ? 'Basic' : appMode === 'advanced' ? 'Advanced' : 'Big Data'}
+                                        {appMode === 'basic' ? 'Basic' : appMode === 'advanced' ? 'Advanced' : appMode === 'customize' ? 'Customize' : 'Big Data'}
                                     </span>
                                     <div className="flex items-center gap-2 ml-1">
                                         <div className="w-1.5 h-1.5 rounded-full bg-[#FACC15] animate-pulse shadow-[0_0_12px_#FACC15]" />
@@ -813,13 +834,14 @@ const Index = () => {
                                     {[
                                         { id: 'basic', Icon: Layout, label: 'Basic Mode', desc: 'Clean & Simple' },
                                         { id: 'advanced', Icon: Layers, label: 'Advanced Mode', desc: 'Powerful Detail' },
-                                        { id: 'big-data', Icon: Database, label: 'Big Data Mode', desc: 'Maximum Insight' }
+                                        { id: 'big-data', Icon: Database, label: 'Big Data Mode', desc: 'Maximum Insight' },
+                                        { id: 'customize', Icon: Settings, label: 'Customize Task', desc: 'Subtasks & Progress' }
                                     ].map((mode) => (
                                         <button
                                             key={mode.id}
                                             onClick={() => {
                                                 if (mode.id !== 'basic' && !user) {
-                                                    setPendingMode(mode.id as 'advanced' | 'big-data');
+                                                    setPendingMode(mode.id as 'advanced' | 'big-data' | 'customize');
                                                     setIsAuthModalOpen(true);
                                                     setIsModePopoverOpen(false);
                                                     toast.info("Login Required for " + mode.label);
@@ -934,8 +956,8 @@ const Index = () => {
                                         </div>
                                     </div>
                                 </div>
-                                <div className={cn(appMode === 'big-data' ? "ml-0 md:ml-4" : "ml-0 md:ml-12", "w-full md:w-auto flex justify-center md:justify-start")}>
-                                    <div className="flex flex-col justify-center items-center md:items-start bg-black/40 md:bg-white/[0.03] backdrop-blur-xl px-4 py-4 md:px-4 md:py-1.5 rounded-[2rem] md:rounded-xl border border-white/5 md:border-white/10 shadow-[0_0_30px_rgba(0,0,0,0.5)] md:shadow-[0_0_20px_rgba(0,0,0,0.2)] min-w-[200px] md:min-w-0 w-[95%] md:w-auto">
+                                <div className={cn(appMode === 'big-data' ? "ml-0 md:ml-4" : "ml-0 md:ml-9", "w-full md:w-auto flex justify-center md:justify-start")}>
+                                    <div className="flex flex-col justify-center items-center md:items-start bg-black/40 md:bg-white/[0.04] backdrop-blur-xl px-4 py-4 md:px-5 md:py-1.5 rounded-[2rem] md:rounded-2xl border border-white/5 md:border-white/10 shadow-[0_0_30px_rgba(0,0,0,0.5)] md:shadow-[0_0_25px_rgba(0,0,0,0.4)] min-w-[200px] md:min-w-0 w-[95%] md:w-auto md:border-l-2 md:border-l-primary/60">
 
                                         {/* Mobile View: Digital Clock Style */}
                                         <div className="flex flex-col items-center md:hidden w-full">
@@ -949,13 +971,17 @@ const Index = () => {
                                             </div>
                                         </div>
 
-                                        {/* Desktop View: Compact Style */}
-                                        <div className="hidden md:flex flex-col">
-                                            <span className="text-[11px] font-black text-primary uppercase tracking-[0.2em] mb-0.5 text-left">
-                                                {currentTime.toLocaleTimeString()} , Day: {format(currentTime, 'EEEE')}
+                                        {/* Desktop View: Enhanced Visibility */}
+                                        <div className="hidden md:flex flex-col gap-0.5">
+                                            <span className="text-[9px] font-black text-primary/50 uppercase tracking-[0.3em] text-left">
+                                                {format(currentTime, 'EEEE')}
                                             </span>
-                                            <span className="text-[14px] font-black text-white/90 uppercase tracking-tighter text-left">
-                                                {format(currentTime, 'MMM dd yyyy')}
+                                            <span className="text-[20px] font-black text-primary uppercase tracking-tight text-left leading-none drop-shadow-[0_0_12px_rgba(250,204,21,0.4)]">
+                                                {format(currentTime, 'hh:mm:ss a')}
+                                            </span>
+                                            <div className="w-full h-[1px] bg-white/10 my-1" />
+                                            <span className="text-[11px] font-black text-white/70 uppercase tracking-widest text-left">
+                                                {format(currentTime, 'MMM dd, yyyy')}
                                             </span>
                                         </div>
                                     </div>
@@ -1209,7 +1235,7 @@ const Index = () => {
                         </div>
                     </div>
 
-                    {appMode !== 'big-data' && (
+                    {appMode !== 'big-data' && appMode !== 'customize' && (
                         <div className="max-w-2xl mt-6 md:mt-16 group relative">
                             <div className={cn(
                                 "relative bg-card rounded-full md:rounded-[2rem] border-2 border-white/5 p-2 md:p-1.5 flex items-center gap-3 transition-all duration-500 overflow-hidden",
@@ -1249,7 +1275,7 @@ const Index = () => {
 
                     <div className="space-y-12 pt-10">
                         {/* MISSION PROGRESS METER / DATA MODE SELECTOR */}
-                        <section className="space-y-4 max-w-2xl animate-in fade-in slide-in-from-bottom duration-700 delay-500">
+                        {appMode !== 'customize' && <section className="space-y-4 max-w-2xl animate-in fade-in slide-in-from-bottom duration-700 delay-500">
                             {appMode === 'big-data' ? (
                                 <div className="flex flex-col gap-4">
                                     <div className="flex items-center gap-3">
@@ -1359,9 +1385,9 @@ const Index = () => {
                                     </div>
                                 </>
                             )}
-                        </section>
+                        </section>}
 
-                        {(appMode !== 'advanced' || advancedViewMode === 'one-day') && appMode !== 'big-data' && (
+                        {(appMode !== 'advanced' || advancedViewMode === 'one-day') && appMode !== 'big-data' && appMode !== 'customize' && (
                             <section className="space-y-6">
                                 <div className="flex items-center justify-between px-1">
                                     <h2 className="text-xs font-black text-muted-foreground uppercase tracking-[0.2em]">{appMode === 'basic' ? 'Live Tasks' : 'Today\'s Missions'}</h2>
@@ -1395,7 +1421,7 @@ const Index = () => {
                             </div>
                         )}
 
-                        {appMode !== 'big-data' && completedTasks.length > 0 && (
+                        {appMode !== 'big-data' && appMode !== 'customize' && completedTasks.length > 0 && (
                             <section className="space-y-4 pt-10 border-t border-white/5">
                                 <h2 className="text-[10px] font-black text-zinc-700 uppercase tracking-widest px-1">Completed Objectives</h2>
                                 <div className="space-y-2 opacity-50 grayscale hover:opacity-100 transition-all">
@@ -1407,6 +1433,17 @@ const Index = () => {
                         )}
 
                         {appMode === 'big-data' && <BigDataConsole handleAIAction={handleAIAction} activeMode={activeMode} setActiveMode={setActiveMode} />}
+
+                        {appMode === 'customize' && (
+                            <CustomizeTaskView
+                                tasks={customizeTasks}
+                                setTasks={setCustomizeTasks}
+                                categories={categories}
+                                availableTags={availableTags}
+                                onManageCategories={() => { setManageType('categories'); setIsManageModalOpen(true); }}
+                                onManageTags={() => { setManageType('tags'); setIsManageModalOpen(true); }}
+                            />
+                        )}
                     </div>
                 </div>
             </main>
@@ -1626,7 +1663,7 @@ const TaskItemView = ({
                         <span className={cn("text-sm md:text-base font-bold tracking-tight line-clamp-2 md:line-clamp-none", task.completed ? "text-muted-foreground/50 line-through" : "text-foreground group-hover:text-primary")}>{task.text}</span>
                     </div>
                     {appMode === 'advanced' && (
-                        <div className="flex items-center gap-2 mt-1.5">
+                        <div className="flex items-center flex-wrap gap-1.5 mt-1.5">
                             {(() => {
                                 const cat = categories?.find((c: any) => c.name === (task.category || 'Mission'));
                                 return (
@@ -1636,6 +1673,23 @@ const TaskItemView = ({
                                     </div>
                                 );
                             })()}
+                            {task.tags && task.tags.length > 0 && task.tags.slice(0, 3).map((tagName: string) => {
+                                const tagObj = availableTags?.find((t: any) => t.name === tagName);
+                                const tagColor = tagObj?.color || '#6366f1';
+                                return (
+                                    <div
+                                        key={tagName}
+                                        className="flex items-center gap-1 px-1.5 py-0.5 rounded-full border"
+                                        style={{ backgroundColor: `${tagColor}12`, borderColor: `${tagColor}30`, color: tagColor }}
+                                    >
+                                        <div className="w-1 h-1 rounded-full shrink-0" style={{ backgroundColor: tagColor }} />
+                                        <span className="text-[8px] font-black uppercase tracking-tight">{tagName}</span>
+                                    </div>
+                                );
+                            })}
+                            {task.tags && task.tags.length > 3 && (
+                                <span className="text-[8px] font-black text-muted-foreground/50 uppercase">+{task.tags.length - 3}</span>
+                            )}
                         </div>
                     )}
                 </div>
