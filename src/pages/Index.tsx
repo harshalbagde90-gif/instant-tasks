@@ -103,40 +103,62 @@ const DEFAULT_TAGS: TagType[] = [
 ];
 
 const Index = () => {
-    const [basicTasks, setBasicTasks] = useLocalStorage<Task[]>('taskflow-tasks-basic', []);
-    const [advancedTasks, setAdvancedTasks] = useLocalStorage<Task[]>('taskflow-tasks-advanced', []);
-    const [customizeTasks, setCustomizeTasks] = useLocalStorage<Task[]>('taskflow-tasks-customize', []);
-
     const [appMode, setAppMode] = useLocalStorage<'basic' | 'advanced' | 'big-data' | 'customize'>('app-mode', 'advanced');
 
-    const [categories, setCategories] = useLocalStorage<Category[]>('task-categories', DEFAULT_CATEGORIES);
-    const [availableTags, setAvailableTags] = useLocalStorage<TagType[]>('task-tags', DEFAULT_TAGS);
+    // 🧠 BRAIN FIX: Use local state for tasks when logged in to bypass localStorage "merging" issues
+    const [basicTasks, setBasicTasks] = useState<Task[]>([]);
+    const [advancedTasks, setAdvancedTasks] = useState<Task[]>([]);
+    const [customizeTasks, setCustomizeTasks] = useState<Task[]>([]);
+    const [categories, setCategories] = useState<Category[]>(DEFAULT_CATEGORIES);
+    const [availableTags, setAvailableTags] = useState<TagType[]>(DEFAULT_TAGS);
 
-    // Auto-restore defaults if categories or tags are empty (e.g., fresh install / cleared storage)
+    // Load initial data from LocalStorage ONLY if not logged in
     useEffect(() => {
-        if (categories.length === 0) {
-            setCategories(DEFAULT_CATEGORIES);
-        }
-    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+        const checkAuth = async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) {
+                // Not logged in -> use localStorage
+                const savedBasic = localStorage.getItem('taskflow-tasks-basic');
+                const savedAdv = localStorage.getItem('taskflow-tasks-advanced');
+                const savedCust = localStorage.getItem('taskflow-tasks-customize');
+                const savedCats = localStorage.getItem('task-categories');
+                const savedTags = localStorage.getItem('task-tags');
 
+                if (savedBasic) setBasicTasks(JSON.parse(savedBasic));
+                if (savedAdv) setAdvancedTasks(JSON.parse(savedAdv));
+                if (savedCust) setCustomizeTasks(JSON.parse(savedCust));
+                if (savedCats) setCategories(JSON.parse(savedCats));
+                if (savedTags) setAvailableTags(JSON.parse(savedTags));
+            }
+        };
+        checkAuth();
+    }, []);
+
+    // Helper to persist only when NOT logged in
     useEffect(() => {
-        if (availableTags.length === 0) {
-            setAvailableTags(DEFAULT_TAGS);
-        }
-    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+        const checkAndPersist = async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) {
+                localStorage.setItem('taskflow-tasks-basic', JSON.stringify(basicTasks));
+                localStorage.setItem('taskflow-tasks-advanced', JSON.stringify(advancedTasks));
+                localStorage.setItem('taskflow-tasks-customize', JSON.stringify(customizeTasks));
+                localStorage.setItem('task-categories', JSON.stringify(categories));
+                localStorage.setItem('task-tags', JSON.stringify(availableTags));
+            }
+        };
+        checkAndPersist();
+    }, [basicTasks, advancedTasks, customizeTasks, categories, availableTags]);
 
+    const itemsPerRow = 3;
     const [isManageModalOpen, setIsManageModalOpen] = useState(false);
     const [manageType, setManageType] = useState<'categories' | 'tags'>('categories');
 
     const tasks = appMode === 'basic' ? basicTasks : appMode === 'customize' ? customizeTasks : advancedTasks;
     const setTasks = (val: Task[] | ((prev: Task[]) => Task[])) => {
-        if (appMode === 'basic') {
-            setBasicTasks(val);
-        } else if (appMode === 'customize') {
-            setCustomizeTasks(val);
-        } else {
-            setAdvancedTasks(val);
-        }
+        const updateFn = typeof val === 'function' ? val : () => val;
+        if (appMode === 'basic') setBasicTasks(updateFn);
+        else if (appMode === 'customize') setCustomizeTasks(updateFn);
+        else setAdvancedTasks(updateFn);
     };
     const [activeView, setActiveView] = useState('my-day');
     const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
