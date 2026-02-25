@@ -1,49 +1,66 @@
 import { supabase } from '@/integrations/supabase/client';
 import { Task, Category, TagType } from '@/types/task';
 
-// ==================== TASKS ====================
+// ==================== TASKS (Fine-grained Sync) ====================
 
-export async function syncTasksToSupabase(userId: string, tasks: Task[], mode: 'basic' | 'advanced' | 'customize') {
+/**
+ * Upserts a single task to Supabase.
+ * This prevents overwriting other devices' data.
+ */
+export async function upsertTaskToSupabase(userId: string, task: Task, mode: 'basic' | 'advanced' | 'customize') {
     try {
-        // Delete existing tasks for this mode
-        await supabase
+        const { error } = await supabase
             .from('tasks')
-            .delete()
-            .eq('user_id', userId)
-            .eq('mode', mode);
-
-        // Insert new tasks
-        if (tasks.length > 0) {
-            const tasksToInsert = tasks.map(task => ({
+            .upsert({
+                id: task.id.startsWith('task-') ? undefined : task.id, // Let Supabase handle IDs if they are temporary local IDs
                 user_id: userId,
                 title: task.text,
                 description: task.description || '',
-                category_id: null as string | null,  // we store category name not id
                 tags: task.tags || [],
                 due_date: task.dueDate || null,
                 reminder: task.reminder || null,
                 completed: task.completed,
                 mode: mode,
                 priority: task.priority || null,
-                attachments: (task.attachments || []) as unknown as import('@/integrations/supabase/types').Json,
-                subtasks: (task.subtasks || []) as unknown as import('@/integrations/supabase/types').Json,
+                attachments: (task.attachments || []) as any,
+                subtasks: (task.subtasks || []) as any,
                 notes: task.notes || '',
-            }));
+                updated_at: new Date().toISOString()
+            }, { onConflict: 'id' });
 
-            const { error } = await supabase
-                .from('tasks')
-                .insert(tasksToInsert);
-
-            if (error) throw error;
-        }
-
+        if (error) throw error;
         return { success: true };
     } catch (error) {
-        console.error('Error syncing tasks to Supabase:', error);
+        console.error('Error upserting task to Supabase:', error);
         return { success: false, error };
     }
 }
 
+/**
+ * Deletes a single task from Supabase.
+ */
+export async function deleteTaskFromSupabase(userId: string, taskId: string) {
+    try {
+        // If it's a temporary local ID, we don't need to delete from cloud
+        if (taskId.startsWith('task-')) return { success: true };
+
+        const { error } = await supabase
+            .from('tasks')
+            .delete()
+            .eq('id', taskId)
+            .eq('user_id', userId);
+
+        if (error) throw error;
+        return { success: true };
+    } catch (error) {
+        console.error('Error deleting task from Supabase:', error);
+        return { success: false, error };
+    }
+}
+
+/**
+ * Loads all tasks for a specific mode.
+ */
 export async function loadTasksFromSupabase(userId: string, mode: 'basic' | 'advanced' | 'customize'): Promise<Task[]> {
     try {
         const { data, error } = await supabase
@@ -55,73 +72,45 @@ export async function loadTasksFromSupabase(userId: string, mode: 'basic' | 'adv
 
         if (error) throw error;
 
-        // Convert Supabase format to Task format
-        const tasks: Task[] = (data || []).map(item => ({
+        return (data || []).map(item => ({
             id: item.id,
             text: item.title,
             description: item.description || undefined,
-            category: undefined,  // category name not stored in tasks table directly
             tags: item.tags || [],
             dueDate: item.due_date || undefined,
             reminder: item.reminder || undefined,
             completed: item.completed,
             priority: item.priority as Task['priority'],
-            attachments: Array.isArray(item.attachments) ? (item.attachments as unknown as { id: string; name: string; url: string }[]) : [],
-            subtasks: Array.isArray(item.subtasks) ? (item.subtasks as unknown as import('@/types/task').Subtask[]) : [],
+            attachments: (item.attachments as any) || [],
+            subtasks: (item.subtasks as any) || [],
             notes: item.notes || '',
             createdAt: new Date(item.created_at).getTime(),
         }));
-
-        return tasks;
     } catch (error) {
         console.error('Error loading tasks from Supabase:', error);
         return [];
     }
 }
 
-// Load all three modes at once
-export async function loadAllTasksFromSupabase(userId: string): Promise<{
-    basicTasks: Task[];
-    advancedTasks: Task[];
-    customizeTasks: Task[];
-}> {
-    const [basicTasks, advancedTasks, customizeTasks] = await Promise.all([
-        loadTasksFromSupabase(userId, 'basic'),
-        loadTasksFromSupabase(userId, 'advanced'),
-        loadTasksFromSupabase(userId, 'customize'),
-    ]);
-    return { basicTasks, advancedTasks, customizeTasks };
-}
-
-// ==================== CATEGORIES ====================
+// ==================== CATEGORIES & TAGS (Bulk Sync is fine here as they change rarely) ====================
 
 export async function syncCategoriesToSupabase(userId: string, categories: Category[]) {
     try {
-        // Delete existing categories
-        await supabase
+        const categoriesToInsert = categories.map(cat => ({
+            user_id: userId,
+            name: cat.name,
+            color: cat.color,
+            icon: cat.icon
+        }));
+
+        const { error } = await supabase
             .from('categories')
-            .delete()
-            .eq('user_id', userId);
+            .upsert(categoriesToInsert, { onConflict: 'user_id,name' });
 
-        // Insert new categories
-        if (categories.length > 0) {
-            const categoriesToInsert = categories.map(cat => ({
-                user_id: userId,
-                name: cat.name,
-                color: cat.color,
-                icon: cat.icon
-            }));
-
-            const { error } = await supabase
-                .from('categories')
-                .insert(categoriesToInsert);
-
-            if (error) throw error;
-        }
-
+        if (error) throw error;
         return { success: true };
     } catch (error) {
-        console.error('Error syncing categories to Supabase:', error);
+        console.error('Error syncing categories:', error);
         return { success: false, error };
     }
 }
@@ -131,167 +120,58 @@ export async function loadCategoriesFromSupabase(userId: string): Promise<Catego
         const { data, error } = await supabase
             .from('categories')
             .select('*')
-            .eq('user_id', userId)
-            .order('created_at', { ascending: true });
+            .eq('user_id', userId);
 
         if (error) throw error;
-
-        const categories: Category[] = (data || []).map(item => ({
+        return (data || []).map(item => ({
             id: item.id,
             name: item.name,
             color: item.color,
             icon: item.icon
         }));
-
-        return categories;
     } catch (error) {
-        console.error('Error loading categories from Supabase:', error);
+        console.error('Error loading categories:', error);
         return [];
     }
 }
 
-// ==================== TAGS ====================
-
-export async function syncTagsToSupabase(userId: string, tags: TagType[]) {
-    try {
-        // Delete existing tags
-        await supabase
-            .from('tags')
-            .delete()
-            .eq('user_id', userId);
-
-        // Insert new tags
-        if (tags.length > 0) {
-            const tagsToInsert = tags.map(tag => ({
-                user_id: userId,
-                name: tag.name,
-                color: tag.color
-            }));
-
-            const { error } = await supabase
-                .from('tags')
-                .insert(tagsToInsert);
-
-            if (error) throw error;
-        }
-
-        return { success: true };
-    } catch (error) {
-        console.error('Error syncing tags to Supabase:', error);
-        return { success: false, error };
-    }
-}
-
-export async function loadTagsFromSupabase(userId: string): Promise<TagType[]> {
-    try {
-        const { data, error } = await supabase
-            .from('tags')
-            .select('*')
-            .eq('user_id', userId)
-            .order('created_at', { ascending: true });
-
-        if (error) throw error;
-
-        const tags: TagType[] = (data || []).map(item => ({
-            id: item.id,
-            name: item.name,
-            color: item.color
-        }));
-
-        return tags;
-    } catch (error) {
-        console.error('Error loading tags from Supabase:', error);
-        return [];
-    }
-}
-
-// ==================== BIG DATA SHEETS ====================
-
-export async function syncSheetsToSupabase(userId: string, sheets: any[], mode: string) {
-    try {
-        // Delete existing sheets for this mode
-        await supabase
-            .from('big_data_sheets')
-            .delete()
-            .eq('user_id', userId)
-            .eq('mode', mode);
-
-        // Insert new sheets
-        if (sheets.length > 0) {
-            const sheetsToInsert = sheets.map(sheet => ({
-                user_id: userId,
-                mode: mode,
-                name: sheet.name,
-                content: sheet.content || '',
-                metadata: (sheet.metadata || {}) as import('@/integrations/supabase/types').Json
-            }));
-
-            const { error } = await supabase
-                .from('big_data_sheets')
-                .insert(sheetsToInsert);
-
-            if (error) throw error;
-        }
-
-        return { success: true };
-    } catch (error) {
-        console.error('Error syncing sheets to Supabase:', error);
-        return { success: false, error };
-    }
-}
-
-export async function loadSheetsFromSupabase(userId: string, mode: string) {
-    try {
-        const { data, error } = await supabase
-            .from('big_data_sheets')
-            .select('*')
-            .eq('user_id', userId)
-            .eq('mode', mode)
-            .order('created_at', { ascending: true });
-
-        if (error) throw error;
-
-        return data || [];
-    } catch (error) {
-        console.error('Error loading sheets from Supabase:', error);
-        return [];
-    }
-}
-
-// ==================== FULL MIGRATION ====================
+// ==================== MIGRATION ====================
 
 export async function migrateLocalDataToSupabase(
     userId: string,
     basicTasks: Task[],
     advancedTasks: Task[],
     categories: Category[],
-    tags: TagType[],
-    bigDataWorkspaces: Record<string, any[]>
+    tags: TagType[]
 ) {
     try {
-        // Sync all data in parallel for speed
-        const results = await Promise.allSettled([
-            syncTasksToSupabase(userId, basicTasks, 'basic'),
-            syncTasksToSupabase(userId, advancedTasks, 'advanced'),
-            syncCategoriesToSupabase(userId, categories),
-            syncTagsToSupabase(userId, tags),
-            // Sync big data sheets for all modes
-            ...Object.entries(bigDataWorkspaces).map(([mode, sheets]) =>
-                syncSheetsToSupabase(userId, sheets, mode)
-            )
-        ]);
+        // Migration still uses bulk-like approach but doesn't delete cloud data
+        // It just merges local data INTO cloud data
+        const tasksToInsert = [
+            ...basicTasks.map(t => ({ ...t, mode: 'basic' as const })),
+            ...advancedTasks.map(t => ({ ...t, mode: 'advanced' as const }))
+        ].map(task => ({
+            user_id: userId,
+            title: task.text,
+            description: task.description || '',
+            tags: task.tags || [],
+            due_date: task.dueDate || null,
+            completed: task.completed,
+            mode: task.mode as 'basic' | 'advanced' | 'customize',
+            priority: task.priority || null,
+            subtasks: (task.subtasks || []) as any,
+        }));
 
-        // Check if any failed
-        const failures = results.filter(r => r.status === 'rejected');
-
-        if (failures.length > 0) {
-            console.error('Some migrations failed:', failures);
-            return { success: false, partialFailure: true };
+        if (tasksToInsert.length > 0) {
+            const { error } = await supabase.from('tasks').insert(tasksToInsert);
+            if (error) throw error;
         }
+
+        await syncCategoriesToSupabase(userId, categories);
 
         return { success: true };
     } catch (error) {
-        console.error('Error during full migration:', error);
+        console.error('Migration error:', error);
         return { success: false, error };
     }
 }
