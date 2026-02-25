@@ -457,11 +457,21 @@ const Index = () => {
                         const mode = (payload.new as any).mode;
 
                         const updateFn = (prev: Task[]) => {
-                            const exists = prev.find(t => t.id === newTask.id);
-                            if (exists) {
-                                return prev.map(t => t.id === newTask.id ? newTask : t);
+                            // Deduplication: 
+                            // 1. Match by real ID
+                            // 2. Or match by title if it was JUST added locally (temp ID starts with 'task-')
+                            const existingIndex = prev.findIndex(t =>
+                                t.id === newTask.id ||
+                                (t.id.startsWith('task-') && t.text === newTask.text)
+                            );
+
+                            if (existingIndex > -1) {
+                                // Update/Replace matching task
+                                const newList = [...prev];
+                                newList[existingIndex] = newTask;
+                                return newList;
                             } else {
-                                // Add to top of list
+                                // Add truly new task from other device
                                 return [newTask, ...prev];
                             }
                         };
