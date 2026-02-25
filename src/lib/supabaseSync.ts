@@ -3,7 +3,7 @@ import { Task, Category, TagType } from '@/types/task';
 
 // ==================== TASKS ====================
 
-export async function syncTasksToSupabase(userId: string, tasks: Task[], mode: 'basic' | 'advanced') {
+export async function syncTasksToSupabase(userId: string, tasks: Task[], mode: 'basic' | 'advanced' | 'customize') {
     try {
         // Delete existing tasks for this mode
         await supabase
@@ -18,17 +18,16 @@ export async function syncTasksToSupabase(userId: string, tasks: Task[], mode: '
                 user_id: userId,
                 title: task.text,
                 description: task.description || '',
-                category_id: task.categoryId || null,
+                category_id: null as string | null,  // we store category name not id
                 tags: task.tags || [],
                 due_date: task.dueDate || null,
                 reminder: task.reminder || null,
                 completed: task.completed,
                 mode: mode,
                 priority: task.priority || null,
-                attachments: task.attachments || [],
-                subtasks: task.subtasks || [],
+                attachments: (task.attachments || []) as unknown as import('@/integrations/supabase/types').Json,
+                subtasks: (task.subtasks || []) as unknown as import('@/integrations/supabase/types').Json,
                 notes: task.notes || '',
-                completed_at: task.completedAt || null
             }));
 
             const { error } = await supabase
@@ -45,7 +44,7 @@ export async function syncTasksToSupabase(userId: string, tasks: Task[], mode: '
     }
 }
 
-export async function loadTasksFromSupabase(userId: string, mode: 'basic' | 'advanced'): Promise<Task[]> {
+export async function loadTasksFromSupabase(userId: string, mode: 'basic' | 'advanced' | 'customize'): Promise<Task[]> {
     try {
         const { data, error } = await supabase
             .from('tasks')
@@ -60,18 +59,17 @@ export async function loadTasksFromSupabase(userId: string, mode: 'basic' | 'adv
         const tasks: Task[] = (data || []).map(item => ({
             id: item.id,
             text: item.title,
-            description: item.description,
-            categoryId: item.category_id,
+            description: item.description || undefined,
+            category: undefined,  // category name not stored in tasks table directly
             tags: item.tags || [],
-            dueDate: item.due_date,
-            reminder: item.reminder,
+            dueDate: item.due_date || undefined,
+            reminder: item.reminder || undefined,
             completed: item.completed,
-            priority: item.priority,
-            attachments: item.attachments || [],
-            subtasks: item.subtasks || [],
+            priority: item.priority as Task['priority'],
+            attachments: Array.isArray(item.attachments) ? (item.attachments as unknown as { id: string; name: string; url: string }[]) : [],
+            subtasks: Array.isArray(item.subtasks) ? (item.subtasks as unknown as import('@/types/task').Subtask[]) : [],
             notes: item.notes || '',
             createdAt: new Date(item.created_at).getTime(),
-            completedAt: item.completed_at ? new Date(item.completed_at).getTime() : undefined
         }));
 
         return tasks;
@@ -79,6 +77,20 @@ export async function loadTasksFromSupabase(userId: string, mode: 'basic' | 'adv
         console.error('Error loading tasks from Supabase:', error);
         return [];
     }
+}
+
+// Load all three modes at once
+export async function loadAllTasksFromSupabase(userId: string): Promise<{
+    basicTasks: Task[];
+    advancedTasks: Task[];
+    customizeTasks: Task[];
+}> {
+    const [basicTasks, advancedTasks, customizeTasks] = await Promise.all([
+        loadTasksFromSupabase(userId, 'basic'),
+        loadTasksFromSupabase(userId, 'advanced'),
+        loadTasksFromSupabase(userId, 'customize'),
+    ]);
+    return { basicTasks, advancedTasks, customizeTasks };
 }
 
 // ==================== CATEGORIES ====================
@@ -211,7 +223,7 @@ export async function syncSheetsToSupabase(userId: string, sheets: any[], mode: 
                 mode: mode,
                 name: sheet.name,
                 content: sheet.content || '',
-                metadata: sheet.metadata || {}
+                metadata: (sheet.metadata || {}) as import('@/integrations/supabase/types').Json
             }));
 
             const { error } = await supabase

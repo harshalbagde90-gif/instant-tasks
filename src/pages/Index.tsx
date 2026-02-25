@@ -374,11 +374,13 @@ const Index = () => {
                     const [
                         cloudBasicTasks,
                         cloudAdvancedTasks,
+                        cloudCustomizeTasks,
                         cloudCategories,
                         cloudTags
                     ] = await Promise.all([
                         supabaseSync.loadTasksFromSupabase(user.id, 'basic'),
                         supabaseSync.loadTasksFromSupabase(user.id, 'advanced'),
+                        supabaseSync.loadTasksFromSupabase(user.id, 'customize'),
                         supabaseSync.loadCategoriesFromSupabase(user.id),
                         supabaseSync.loadTagsFromSupabase(user.id)
                     ]);
@@ -386,8 +388,9 @@ const Index = () => {
                     // Update state with cloud data
                     setBasicTasks(cloudBasicTasks);
                     setAdvancedTasks(cloudAdvancedTasks);
-                    setCategories(cloudCategories);
-                    setAvailableTags(cloudTags);
+                    setCustomizeTasks(cloudCustomizeTasks);
+                    setCategories(cloudCategories.length > 0 ? cloudCategories : categories);
+                    setAvailableTags(cloudTags.length > 0 ? cloudTags : availableTags);
 
                     // Mark as loaded so we don't reload on every render
                     sessionStorage.setItem('migration-completed', 'true');
@@ -547,7 +550,7 @@ const Index = () => {
 
         // If logged in, sync to Supabase
         if (user) {
-            const mode = appMode === 'basic' ? 'basic' : 'advanced';
+            const mode = appMode === 'basic' ? 'basic' : appMode === 'customize' ? 'customize' : 'advanced';
             await supabaseSync.syncTasksToSupabase(user.id, [...tasks, newTask], mode);
         }
 
@@ -562,7 +565,7 @@ const Index = () => {
         setTasks(updatedTasks);
 
         if (user) {
-            const mode = appMode === 'basic' ? 'basic' : 'advanced';
+            const mode = appMode === 'basic' ? 'basic' : appMode === 'customize' ? 'customize' : 'advanced';
             await supabaseSync.syncTasksToSupabase(user.id, updatedTasks, mode);
         }
     };
@@ -574,7 +577,7 @@ const Index = () => {
         toast.error("Task deleted");
 
         if (user) {
-            const mode = appMode === 'basic' ? 'basic' : 'advanced';
+            const mode = appMode === 'basic' ? 'basic' : appMode === 'customize' ? 'customize' : 'advanced';
             await supabaseSync.syncTasksToSupabase(user.id, updatedTasks, mode);
         }
     };
@@ -696,7 +699,7 @@ const Index = () => {
         });
 
         if (user && updatedTasksList.length > 0) {
-            const mode = appMode === 'basic' ? 'basic' : 'advanced';
+            const mode = appMode === 'basic' ? 'basic' : appMode === 'customize' ? 'customize' : 'advanced';
             await supabaseSync.syncTasksToSupabase(user.id, updatedTasksList, mode);
         }
     };

@@ -55,6 +55,156 @@ export type Database = {
           }
         ]
       }
+      tasks: {
+        Row: {
+          id: string
+          user_id: string
+          title: string
+          description: string | null
+          category_id: string | null
+          tags: string[]
+          due_date: string | null
+          reminder: string | null
+          completed: boolean
+          mode: 'basic' | 'advanced' | 'customize'
+          priority: 'low' | 'medium' | 'high' | 'urgent' | null
+          attachments: Json
+          subtasks: Json
+          notes: string | null
+          created_at: string
+          updated_at: string
+          completed_at: string | null
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          title: string
+          description?: string | null
+          category_id?: string | null
+          tags?: string[]
+          due_date?: string | null
+          reminder?: string | null
+          completed?: boolean
+          mode: 'basic' | 'advanced' | 'customize'
+          priority?: 'low' | 'medium' | 'high' | 'urgent' | null
+          attachments?: Json
+          subtasks?: Json
+          notes?: string | null
+          created_at?: string
+          updated_at?: string
+          completed_at?: string | null
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          title?: string
+          description?: string | null
+          category_id?: string | null
+          tags?: string[]
+          due_date?: string | null
+          reminder?: string | null
+          completed?: boolean
+          mode?: 'basic' | 'advanced' | 'customize'
+          priority?: 'low' | 'medium' | 'high' | 'urgent' | null
+          attachments?: Json
+          subtasks?: Json
+          notes?: string | null
+          created_at?: string
+          updated_at?: string
+          completed_at?: string | null
+        }
+        Relationships: []
+      }
+      categories: {
+        Row: {
+          id: string
+          user_id: string
+          name: string
+          color: string
+          icon: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          name: string
+          color: string
+          icon: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          name?: string
+          color?: string
+          icon?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      tags: {
+        Row: {
+          id: string
+          user_id: string
+          name: string
+          color: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          name: string
+          color: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          name?: string
+          color?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      big_data_sheets: {
+        Row: {
+          id: string
+          user_id: string
+          mode: string
+          name: string
+          content: string
+          metadata: Json
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          mode: string
+          name: string
+          content?: string
+          metadata?: Json
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          mode?: string
+          name?: string
+          content?: string
+          metadata?: Json
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       shared_tasks: {
         Row: {
           id: string
