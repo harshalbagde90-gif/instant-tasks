@@ -103,86 +103,13 @@ const DEFAULT_TAGS: TagType[] = [
 ];
 
 const Index = () => {
-    // 🧠 BRAIN FIX: Use local state for tasks when logged in
-    const [basicTasks, setBasicTasks] = useState<Task[]>([]);
-    const [advancedTasks, setAdvancedTasks] = useState<Task[]>([]);
-    const [customizeTasks, setCustomizeTasks] = useState<Task[]>([]);
-    const [categories, setCategories] = useState<Category[]>(DEFAULT_CATEGORIES);
-    const [availableTags, setAvailableTags] = useState<TagType[]>(DEFAULT_TAGS);
-    const [isLoadingCloud, setIsLoadingCloud] = useState(true);
+    const [basicTasks, setBasicTasks] = useLocalStorage<Task[]>('taskflow-tasks-basic', []);
+    const [advancedTasks, setAdvancedTasks] = useLocalStorage<Task[]>('taskflow-tasks-advanced', []);
+    const [customizeTasks, setCustomizeTasks] = useLocalStorage<Task[]>('taskflow-tasks-customize', []);
+    const [appMode, setAppMode] = useLocalStorage<'basic' | 'advanced' | 'big-data' | 'customize'>('app-mode', 'advanced');
 
-    // 1. 🛡️ AUTH & INITIAL LOAD
-    useEffect(() => {
-        const initSession = async () => {
-            setIsLoadingCloud(true);
-            const { data: { session } } = await supabase.auth.getSession();
-            const currentUser = session?.user ?? null;
-            setUser(currentUser);
-
-            if (currentUser) {
-                // User is LOGGED IN -> Priority: LOAD FROM CLOUD
-                console.log('🌐 User detected, loading from Cloud...');
-                try {
-                    const [cb, ca, cc, ccat, ct] = await Promise.all([
-                        supabaseSync.loadTasksFromSupabase(currentUser.id, 'basic'),
-                        supabaseSync.loadTasksFromSupabase(currentUser.id, 'advanced'),
-                        supabaseSync.loadTasksFromSupabase(currentUser.id, 'customize'),
-                        supabaseSync.loadCategoriesFromSupabase(currentUser.id),
-                        supabaseSync.loadTagsFromSupabase(currentUser.id)
-                    ]);
-                    setBasicTasks(cb);
-                    setAdvancedTasks(ca);
-                    setCustomizeTasks(cc);
-                    if (ccat.length > 0) setCategories(ccat);
-                    if (ct.length > 0) setAvailableTags(ct);
-                    cloudSyncDone.current = true;
-                } catch (err) {
-                    console.error('Failed to load cloud data on mount:', err);
-                }
-            } else {
-                // Not logged in -> use localStorage
-                console.log('🏠 No user, loading from LocalStorage...');
-                const savedBasic = localStorage.getItem('taskflow-tasks-basic');
-                const savedAdv = localStorage.getItem('taskflow-tasks-advanced');
-                const savedCust = localStorage.getItem('taskflow-tasks-customize');
-                const savedCats = localStorage.getItem('task-categories');
-                const savedTags = localStorage.getItem('task-tags');
-
-                if (savedBasic) setBasicTasks(JSON.parse(savedBasic));
-                if (savedAdv) setAdvancedTasks(JSON.parse(savedAdv));
-                if (savedCust) setCustomizeTasks(JSON.parse(savedCust));
-                if (savedCats) setCategories(JSON.parse(savedCats));
-                if (savedTags) setAvailableTags(JSON.parse(savedTags));
-            }
-            setIsLoadingCloud(false);
-        };
-
-        initSession();
-
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-            const newUser = session?.user ?? null;
-            if (newUser?.id !== user?.id) {
-                setUser(newUser);
-                if (newUser) {
-                    // Refresh data if user switched/logged in
-                    cloudSyncDone.current = false;
-                }
-            }
-        });
-
-        return () => subscription.unsubscribe();
-    }, []);
-
-    // 2. 🏠 GUEST PERSISTENCE (Only if NOT logged in)
-    useEffect(() => {
-        if (!user && !isLoadingCloud) {
-            localStorage.setItem('taskflow-tasks-basic', JSON.stringify(basicTasks));
-            localStorage.setItem('taskflow-tasks-advanced', JSON.stringify(advancedTasks));
-            localStorage.setItem('taskflow-tasks-customize', JSON.stringify(customizeTasks));
-            localStorage.setItem('task-categories', JSON.stringify(categories));
-            localStorage.setItem('task-tags', JSON.stringify(availableTags));
-        }
-    }, [basicTasks, advancedTasks, customizeTasks, categories, availableTags, user, isLoadingCloud]);
+    const [categories, setCategories] = useLocalStorage<Category[]>('task-categories', DEFAULT_CATEGORIES);
+    const [availableTags, setAvailableTags] = useLocalStorage<TagType[]>('task-tags', DEFAULT_TAGS);
 
     const itemsPerRow = 3;
     const [isManageModalOpen, setIsManageModalOpen] = useState(false);
@@ -190,10 +117,9 @@ const Index = () => {
 
     const tasks = appMode === 'basic' ? basicTasks : appMode === 'customize' ? customizeTasks : advancedTasks;
     const setTasks = (val: Task[] | ((prev: Task[]) => Task[])) => {
-        const updateFn = typeof val === 'function' ? val : () => val;
-        if (appMode === 'basic') setBasicTasks(updateFn);
-        else if (appMode === 'customize') setCustomizeTasks(updateFn);
-        else setAdvancedTasks(updateFn);
+        if (appMode === 'basic') setBasicTasks(val);
+        else if (appMode === 'customize') setCustomizeTasks(val);
+        else setAdvancedTasks(val);
     };
     const [activeView, setActiveView] = useState('my-day');
     const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
@@ -398,22 +324,17 @@ const Index = () => {
                 setIsMigrationOpen(true);
                 setIsMigrationComplete(false);
 
-                // IMPORTANT: Clear guest data flag immediately to prevent re-entry 
-                // if the effect triggers again mid-migration
-                const guestBasic = [...basicTasks];
-                const guestAdvanced = [...advancedTasks];
-                guestDataUtils.clearGuestData();
-
                 try {
                     const result = await supabaseSync.migrateLocalDataToSupabase(
                         user.id,
-                        guestBasic,
-                        guestAdvanced,
+                        basicTasks,
+                        advancedTasks,
                         categories,
                         availableTags
                     );
 
                     if (result.success) {
+                        guestDataUtils.clearGuestData(); // ONLY Clear after confirmed success
                         setIsMigrationComplete(true);
                         setTimeout(() => {
                             setIsMigrationOpen(false);
@@ -515,18 +436,16 @@ const Index = () => {
                         const mode = (payload.new as any).mode;
 
                         const updateFn = (prev: Task[]) => {
-                            const now = Date.now();
-                            const existingIndex = prev.findIndex(t =>
-                                t.id === newTask.id ||
-                                (t.id.startsWith('task-') && t.text === newTask.text && (now - t.createdAt < 15000))
-                            );
+                            // Deduplicate by UUID
+                            const existingIndex = prev.findIndex(t => t.id === newTask.id);
 
                             if (existingIndex > -1) {
+                                // Just update if changed
                                 const newList = [...prev];
                                 newList[existingIndex] = newTask;
                                 return newList;
                             } else {
-                                if (prev.some(t => t.id === newTask.id)) return prev;
+                                // Truly new from other device
                                 return [newTask, ...prev];
                             }
                         };
@@ -661,8 +580,9 @@ const Index = () => {
             setIsGuestWarningOpen(true);
         }
 
+        // Generate a real UUID on frontend to prevent cross-device duplicates
         const newTask: Task = {
-            id: `task-${Date.now()}`,
+            id: crypto.randomUUID(),
             text,
             completed: false,
             createdAt: Date.now(),
@@ -671,10 +591,8 @@ const Index = () => {
                 : undefined
         };
 
-        // Update local state first for instant feedback (Optimistic UI)
         setTasks(prev => [newTask, ...prev]);
 
-        // Sync to Supabase individually if logged in
         if (user) {
             const mode = appMode === 'basic' ? 'basic' : appMode === 'customize' ? 'customize' : 'advanced';
             const result = await supabaseSync.upsertTaskToSupabase(user.id, newTask, mode);
