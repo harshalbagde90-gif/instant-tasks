@@ -14,6 +14,9 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
-    flowType: 'pkce', // More secure, works correctly on localhost
-  }
+    flowType: 'pkce',
+  },
+  db: {
+    schema: 'public',
+  },
 });

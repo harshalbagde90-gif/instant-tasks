@@ -315,19 +315,17 @@ const Index = () => {
         }
     }, []);
 
-    // Handle login migration
+    // Handle login migration and cloud data loading
     useEffect(() => {
-        // Check if migration already happened in this session
-        const migrationDone = sessionStorage.getItem('migration-completed');
+        if (!user) return; // Only run when user is logged in
 
-        if (user && guestDataUtils.hasGuestData() && !migrationDone) {
-            // User just logged in and has local guest data
+        if (guestDataUtils.hasGuestData()) {
+            // User just logged in WITH local guest data → migrate to Supabase
             const migrateData = async () => {
                 setIsMigrationOpen(true);
                 setIsMigrationComplete(false);
 
                 try {
-                    // Migrate all local data to Supabase
                     const result = await supabaseSync.migrateLocalDataToSupabase(
                         user.id,
                         basicTasks,
@@ -340,17 +338,8 @@ const Index = () => {
                     if (result.success) {
                         setIsMigrationComplete(true);
                         toast.success('Your data is now saved permanently in the cloud!');
-
-                        // Clear guest data state
                         guestDataUtils.resetGuestWarningState();
-
-                        // Clear ALL localStorage data after migration
                         guestDataUtils.clearGuestData();
-
-                        // Mark migration as complete in this session
-                        sessionStorage.setItem('migration-completed', 'true');
-
-                        // Close migration dialog after 2 seconds
                         setTimeout(() => {
                             setIsMigrationOpen(false);
                             setIsMigrationComplete(false);
@@ -365,12 +354,13 @@ const Index = () => {
                     setIsMigrationOpen(false);
                 }
             };
-
             migrateData();
-        } else if (user && !migrationDone) {
-            // User is logged in but no guest data - load from Supabase
+        } else {
+            // User is logged in, no guest data → always load fresh from Supabase
             const loadCloudData = async () => {
                 try {
+                    console.log('🔄 Loading tasks from Supabase for user:', user.id);
+
                     const [
                         cloudBasicTasks,
                         cloudAdvancedTasks,
@@ -385,17 +375,21 @@ const Index = () => {
                         supabaseSync.loadTagsFromSupabase(user.id)
                     ]);
 
-                    // Update state with cloud data
+                    console.log('✅ Loaded from Supabase:', {
+                        basic: cloudBasicTasks.length,
+                        advanced: cloudAdvancedTasks.length,
+                        customize: cloudCustomizeTasks.length,
+                    });
+
+                    // Always set cloud data (Supabase is source of truth for logged-in users)
                     setBasicTasks(cloudBasicTasks);
                     setAdvancedTasks(cloudAdvancedTasks);
                     setCustomizeTasks(cloudCustomizeTasks);
-                    setCategories(cloudCategories.length > 0 ? cloudCategories : categories);
-                    setAvailableTags(cloudTags.length > 0 ? cloudTags : availableTags);
+                    if (cloudCategories.length > 0) setCategories(cloudCategories);
+                    if (cloudTags.length > 0) setAvailableTags(cloudTags);
 
-                    // Mark as loaded so we don't reload on every render
-                    sessionStorage.setItem('migration-completed', 'true');
                 } catch (error) {
-                    console.error('Error loading cloud data:', error);
+                    console.error('❌ Error loading cloud data:', error);
                 }
             };
 
