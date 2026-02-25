@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Lottie from 'lottie-react';
 import { Sidebar } from '@/components/Sidebar';
 import { TaskDetail } from '@/components/TaskDetail';
@@ -166,6 +166,10 @@ const Index = () => {
     const [isMigrationOpen, setIsMigrationOpen] = useState(false);
     const [isMigrationComplete, setIsMigrationComplete] = useState(false);
 
+    // 🔑 Guard: ensures cloud sync runs ONLY ONCE per app lifecycle
+    // useRef because it persists across re-renders without causing them
+    const cloudSyncDone = useRef(false);
+
     const [selectedDate, setSelectedDate] = useState<Date>(new Date());
     const [weekStartDate, setWeekStartDate] = useState<Date>(startOfWeek(new Date(), { weekStartsOn: 0 }));
     const [isTaskNoteOpen, setIsTaskNoteOpen] = useState(false);
@@ -315,13 +319,25 @@ const Index = () => {
         }
     }, []);
 
-    // Handle login migration and cloud data loading
+    // Handle login migration + cloud data load — runs EXACTLY ONCE per session
     useEffect(() => {
-        if (!user) return; // Only run when user is logged in
+        // If no user, reset the guard (user logged out)
+        if (!user) {
+            cloudSyncDone.current = false;
+            return;
+        }
+
+        // 🔑 KEY GUARD: if already ran, skip — even if Supabase fires user change multiple times
+        if (cloudSyncDone.current) return;
+        cloudSyncDone.current = true; // Mark immediately before any async work
 
         if (guestDataUtils.hasGuestData()) {
             // User just logged in WITH local guest data → migrate to Supabase
+            // Clear guest data flag FIRST (synchronously) to prevent re-entry
+            guestDataUtils.resetGuestWarningState();
+
             const migrateData = async () => {
+                toast.dismiss(); // Clear all existing toasts before showing migration dialog
                 setIsMigrationOpen(true);
                 setIsMigrationComplete(false);
 
@@ -337,9 +353,8 @@ const Index = () => {
 
                     if (result.success) {
                         setIsMigrationComplete(true);
-                        toast.success('Your data is now saved permanently in the cloud!');
-                        guestDataUtils.resetGuestWarningState();
-                        guestDataUtils.clearGuestData();
+                        // No toast here — MigrationDialog shows the success message itself
+                        guestDataUtils.clearGuestData(); // Clear after success
                         setTimeout(() => {
                             setIsMigrationOpen(false);
                             setIsMigrationComplete(false);
@@ -347,16 +362,19 @@ const Index = () => {
                     } else {
                         toast.error('Migration failed. Your local data is still safe.');
                         setIsMigrationOpen(false);
+                        cloudSyncDone.current = false; // Allow retry on error
                     }
                 } catch (error) {
                     console.error('Migration error:', error);
                     toast.error('Migration failed. Please try logging out and back in.');
                     setIsMigrationOpen(false);
+                    cloudSyncDone.current = false; // Allow retry on error
                 }
             };
             migrateData();
+
         } else {
-            // User is logged in, no guest data → always load fresh from Supabase
+            // User is logged in, no guest data → load fresh from Supabase ONCE
             const loadCloudData = async () => {
                 try {
                     console.log('🔄 Loading tasks from Supabase for user:', user.id);
@@ -381,7 +399,7 @@ const Index = () => {
                         customize: cloudCustomizeTasks.length,
                     });
 
-                    // Always set cloud data (Supabase is source of truth for logged-in users)
+                    // Supabase is source of truth for logged-in users
                     setBasicTasks(cloudBasicTasks);
                     setAdvancedTasks(cloudAdvancedTasks);
                     setCustomizeTasks(cloudCustomizeTasks);
@@ -390,33 +408,13 @@ const Index = () => {
 
                 } catch (error) {
                     console.error('❌ Error loading cloud data:', error);
+                    cloudSyncDone.current = false; // Allow retry on error
                 }
             };
 
             loadCloudData();
         }
     }, [user]);
-
-    // Auto-sync categories to Supabase
-    useEffect(() => {
-        if (user && categories.length > 0) {
-            supabaseSync.syncCategoriesToSupabase(user.id, categories);
-        }
-    }, [categories, user]);
-
-    // Auto-sync tags to Supabase
-    useEffect(() => {
-        if (user && availableTags.length > 0) {
-            supabaseSync.syncTagsToSupabase(user.id, availableTags);
-        }
-    }, [availableTags, user]);
-
-    // Auto-sync Big Data sheets to Supabase
-    useEffect(() => {
-        if (user && bigDataWorkspaces.length > 0) {
-            supabaseSync.syncSheetsToSupabase(user.id, bigDataWorkspaces);
-        }
-    }, [bigDataWorkspaces, user]);
 
 
 

@@ -6,7 +6,7 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Cloud, CheckCircle2, Loader2 } from 'lucide-react';
+import { CheckCircle2, Loader2 } from 'lucide-react';
 
 interface MigrationDialogProps {
     isOpen: boolean;
@@ -21,68 +21,75 @@ export const MigrationDialog: React.FC<MigrationDialogProps> = ({
 
     return (
         <>
-            {/* Darker backdrop for better visibility */}
-            <div className="fixed inset-0 bg-black/85 backdrop-blur-md z-[9998]" />
+            {/* Full-screen backdrop */}
+            <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-[9998]" />
 
             <AlertDialog open={isOpen}>
-                <AlertDialogContent className="max-w-lg bg-[#0a0a0a]/98 border-2 border-[#FACC15]/60 shadow-[0_0_60px_rgba(250,204,21,0.5)] z-[9999]">
+                <AlertDialogContent className="max-w-md bg-[#0a0a0a]/98 border-2 border-[#FACC15]/60 shadow-[0_0_60px_rgba(250,204,21,0.4)] z-[9999]">
                     <AlertDialogHeader>
-                        <div className="flex flex-col items-center gap-6 py-8">
-                            <div className="relative">
-                                <div className={`w-24 h-24 rounded-full flex items-center justify-center transition-all duration-500 ${isComplete
-                                    ? 'bg-green-500/20 border-2 border-green-500/60 shadow-[0_0_35px_rgba(34,197,94,0.5)]'
-                                    : 'bg-[#FACC15]/20 border-2 border-[#FACC15]/60 shadow-[0_0_35px_rgba(250,204,21,0.5)]'
-                                    }`}>
-                                    {isComplete ? (
-                                        <CheckCircle2 className="w-14 h-14 text-green-400 animate-pulse" />
-                                    ) : (
-                                        <Cloud className="w-14 h-14 text-[#FACC15] animate-pulse" />
+                        <div className="flex flex-col items-center gap-8 py-10 px-4">
+
+                            {/* ── Centered circular animation ── */}
+                            <div className="flex items-center justify-center w-full">
+                                <div className="relative flex items-center justify-center">
+                                    {/* Outer spinning ring */}
+                                    {!isComplete && (
+                                        <div className="absolute w-36 h-36 rounded-full border-4 border-transparent border-t-[#FACC15] border-r-[#FACC15]/40 animate-spin" />
                                     )}
-                                </div>
-                                {!isComplete && (
-                                    <div className="absolute -bottom-3 -right-3 bg-black rounded-full p-2 border-2 border-[#FACC15]/60">
-                                        <Loader2 className="w-10 h-10 text-[#FACC15] animate-spin" />
+
+                                    {/* Inner glow circle */}
+                                    <div className={`w-28 h-28 rounded-full flex items-center justify-center transition-all duration-700 ${isComplete
+                                            ? 'bg-green-500/20 border-2 border-green-400/70 shadow-[0_0_40px_rgba(34,197,94,0.6)]'
+                                            : 'bg-[#FACC15]/10 border-2 border-[#FACC15]/50 shadow-[0_0_40px_rgba(250,204,21,0.4)]'
+                                        }`}>
+                                        {isComplete ? (
+                                            <CheckCircle2 className="w-14 h-14 text-green-400 animate-pulse" />
+                                        ) : (
+                                            <Loader2 className="w-14 h-14 text-[#FACC15] animate-spin" />
+                                        )}
                                     </div>
-                                )}
+                                </div>
                             </div>
 
-                            <div className="text-center space-y-3">
-                                <AlertDialogTitle className="text-3xl font-black text-white drop-shadow-[0_0_12px_rgba(250,204,21,0.6)]">
+                            {/* ── Title & Description ── */}
+                            <div className="text-center space-y-3 w-full">
+                                <AlertDialogTitle className="text-2xl font-black text-white drop-shadow-[0_0_12px_rgba(250,204,21,0.5)]">
                                     {isComplete ? '✅ Migration Complete!' : '🔄 Migrating Your Data...'}
                                 </AlertDialogTitle>
-                                <AlertDialogDescription className="text-zinc-200 max-w-md text-base leading-relaxed px-4">
+                                <AlertDialogDescription className="text-zinc-300 text-base leading-relaxed">
                                     {isComplete ? (
-                                        <span className="text-green-300 font-bold text-lg">
-                                            🎉 Your data has been safely migrated to the cloud and is now permanently saved!
+                                        <span className="text-green-300 font-semibold">
+                                            🎉 Your data is safely in the cloud and permanently saved!
                                         </span>
                                     ) : (
-                                        <span className="font-medium">
-                                            We are securely transferring your local data to the cloud. This will only take a moment...
+                                        <span>
+                                            Securely transferring your local data to the cloud. This will only take a moment...
                                         </span>
                                     )}
                                 </AlertDialogDescription>
                             </div>
 
+                            {/* ── Progress bar (loading) ── */}
                             {!isComplete && (
-                                <div className="w-full max-w-sm space-y-3">
-                                    <div className="flex items-center justify-between text-sm font-bold text-zinc-300">
+                                <div className="w-full space-y-2">
+                                    <div className="flex items-center justify-between text-xs font-bold text-zinc-400">
                                         <span>☁️ Uploading to Cloud...</span>
                                         <span className="text-[#FACC15] animate-pulse">Please wait</span>
                                     </div>
-                                    <div className="h-2.5 bg-white/10 rounded-full overflow-hidden shadow-inner border border-white/20">
-                                        <div className="h-full bg-gradient-to-r from-[#FACC15] via-[#FFD700] to-[#D4AF37] animate-pulse shadow-[0_0_12px_rgba(250,204,21,0.7)]" style={{ width: '100%' }} />
+                                    <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+                                        <div className="h-full bg-gradient-to-r from-[#FACC15] via-[#FFD700] to-[#D4AF37] animate-pulse w-full shadow-[0_0_10px_rgba(250,204,21,0.6)]" />
                                     </div>
                                 </div>
                             )}
 
+                            {/* ── Success confirmation ── */}
                             {isComplete && (
-                                <div className="flex flex-col items-center gap-2 text-sm text-green-200 bg-green-500/15 px-6 py-4 rounded-xl border-2 border-green-500/40 shadow-[0_0_20px_rgba(34,197,94,0.3)]">
-                                    <div className="flex items-center gap-2 font-bold">
-                                        <CheckCircle2 className="w-5 h-5 text-green-400" />
-                                        <span>Tasks, categories, and tags synced successfully</span>
-                                    </div>
+                                <div className="flex items-center gap-2 text-sm text-green-200 bg-green-500/10 px-6 py-3 rounded-xl border border-green-500/30">
+                                    <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
+                                    <span className="font-medium">Tasks, categories, and tags synced successfully</span>
                                 </div>
                             )}
+
                         </div>
                     </AlertDialogHeader>
                 </AlertDialogContent>
