@@ -103,21 +103,45 @@ const DEFAULT_TAGS: TagType[] = [
 ];
 
 const Index = () => {
-    const [appMode, setAppMode] = useLocalStorage<'basic' | 'advanced' | 'big-data' | 'customize'>('app-mode', 'advanced');
-
-    // 🧠 BRAIN FIX: Use local state for tasks when logged in to bypass localStorage "merging" issues
+    // 🧠 BRAIN FIX: Use local state for tasks when logged in
     const [basicTasks, setBasicTasks] = useState<Task[]>([]);
     const [advancedTasks, setAdvancedTasks] = useState<Task[]>([]);
     const [customizeTasks, setCustomizeTasks] = useState<Task[]>([]);
     const [categories, setCategories] = useState<Category[]>(DEFAULT_CATEGORIES);
     const [availableTags, setAvailableTags] = useState<TagType[]>(DEFAULT_TAGS);
+    const [isLoadingCloud, setIsLoadingCloud] = useState(true);
 
-    // Load initial data from LocalStorage ONLY if not logged in
+    // 1. 🛡️ AUTH & INITIAL LOAD
     useEffect(() => {
-        const checkAuth = async () => {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) {
+        const initSession = async () => {
+            setIsLoadingCloud(true);
+            const { data: { session } } = await supabase.auth.getSession();
+            const currentUser = session?.user ?? null;
+            setUser(currentUser);
+
+            if (currentUser) {
+                // User is LOGGED IN -> Priority: LOAD FROM CLOUD
+                console.log('🌐 User detected, loading from Cloud...');
+                try {
+                    const [cb, ca, cc, ccat, ct] = await Promise.all([
+                        supabaseSync.loadTasksFromSupabase(currentUser.id, 'basic'),
+                        supabaseSync.loadTasksFromSupabase(currentUser.id, 'advanced'),
+                        supabaseSync.loadTasksFromSupabase(currentUser.id, 'customize'),
+                        supabaseSync.loadCategoriesFromSupabase(currentUser.id),
+                        supabaseSync.loadTagsFromSupabase(currentUser.id)
+                    ]);
+                    setBasicTasks(cb);
+                    setAdvancedTasks(ca);
+                    setCustomizeTasks(cc);
+                    if (ccat.length > 0) setCategories(ccat);
+                    if (ct.length > 0) setAvailableTags(ct);
+                    cloudSyncDone.current = true;
+                } catch (err) {
+                    console.error('Failed to load cloud data on mount:', err);
+                }
+            } else {
                 // Not logged in -> use localStorage
+                console.log('🏠 No user, loading from LocalStorage...');
                 const savedBasic = localStorage.getItem('taskflow-tasks-basic');
                 const savedAdv = localStorage.getItem('taskflow-tasks-advanced');
                 const savedCust = localStorage.getItem('taskflow-tasks-customize');
@@ -130,24 +154,35 @@ const Index = () => {
                 if (savedCats) setCategories(JSON.parse(savedCats));
                 if (savedTags) setAvailableTags(JSON.parse(savedTags));
             }
+            setIsLoadingCloud(false);
         };
-        checkAuth();
+
+        initSession();
+
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+            const newUser = session?.user ?? null;
+            if (newUser?.id !== user?.id) {
+                setUser(newUser);
+                if (newUser) {
+                    // Refresh data if user switched/logged in
+                    cloudSyncDone.current = false;
+                }
+            }
+        });
+
+        return () => subscription.unsubscribe();
     }, []);
 
-    // Helper to persist only when NOT logged in
+    // 2. 🏠 GUEST PERSISTENCE (Only if NOT logged in)
     useEffect(() => {
-        const checkAndPersist = async () => {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) {
-                localStorage.setItem('taskflow-tasks-basic', JSON.stringify(basicTasks));
-                localStorage.setItem('taskflow-tasks-advanced', JSON.stringify(advancedTasks));
-                localStorage.setItem('taskflow-tasks-customize', JSON.stringify(customizeTasks));
-                localStorage.setItem('task-categories', JSON.stringify(categories));
-                localStorage.setItem('task-tags', JSON.stringify(availableTags));
-            }
-        };
-        checkAndPersist();
-    }, [basicTasks, advancedTasks, customizeTasks, categories, availableTags]);
+        if (!user && !isLoadingCloud) {
+            localStorage.setItem('taskflow-tasks-basic', JSON.stringify(basicTasks));
+            localStorage.setItem('taskflow-tasks-advanced', JSON.stringify(advancedTasks));
+            localStorage.setItem('taskflow-tasks-customize', JSON.stringify(customizeTasks));
+            localStorage.setItem('task-categories', JSON.stringify(categories));
+            localStorage.setItem('task-tags', JSON.stringify(availableTags));
+        }
+    }, [basicTasks, advancedTasks, customizeTasks, categories, availableTags, user, isLoadingCloud]);
 
     const itemsPerRow = 3;
     const [isManageModalOpen, setIsManageModalOpen] = useState(false);
