@@ -337,38 +337,39 @@ const Index = () => {
             guestDataUtils.resetGuestWarningState();
 
             const migrateData = async () => {
-                toast.dismiss(); // Clear all existing toasts before showing migration dialog
+                toast.dismiss();
                 setIsMigrationOpen(true);
                 setIsMigrationComplete(false);
+
+                // IMPORTANT: Clear guest data flag immediately to prevent re-entry 
+                // if the effect triggers again mid-migration
+                const guestBasic = [...basicTasks];
+                const guestAdvanced = [...advancedTasks];
+                guestDataUtils.clearGuestData();
 
                 try {
                     const result = await supabaseSync.migrateLocalDataToSupabase(
                         user.id,
-                        basicTasks,
-                        advancedTasks,
+                        guestBasic,
+                        guestAdvanced,
                         categories,
-                        availableTags,
-                        bigDataWorkspaces
+                        availableTags
                     );
 
                     if (result.success) {
                         setIsMigrationComplete(true);
-                        // No toast here — MigrationDialog shows the success message itself
-                        guestDataUtils.clearGuestData(); // Clear after success
                         setTimeout(() => {
                             setIsMigrationOpen(false);
                             setIsMigrationComplete(false);
                         }, 2500);
                     } else {
-                        toast.error('Migration failed. Your local data is still safe.');
                         setIsMigrationOpen(false);
-                        cloudSyncDone.current = false; // Allow retry on error
+                        cloudSyncDone.current = false;
                     }
                 } catch (error) {
                     console.error('Migration error:', error);
-                    toast.error('Migration failed. Please try logging out and back in.');
                     setIsMigrationOpen(false);
-                    cloudSyncDone.current = false; // Allow retry on error
+                    cloudSyncDone.current = false;
                 }
             };
             migrateData();
@@ -457,21 +458,18 @@ const Index = () => {
                         const mode = (payload.new as any).mode;
 
                         const updateFn = (prev: Task[]) => {
-                            // Deduplication: 
-                            // 1. Match by real ID
-                            // 2. Or match by title if it was JUST added locally (temp ID starts with 'task-')
+                            const now = Date.now();
                             const existingIndex = prev.findIndex(t =>
                                 t.id === newTask.id ||
-                                (t.id.startsWith('task-') && t.text === newTask.text)
+                                (t.id.startsWith('task-') && t.text === newTask.text && (now - t.createdAt < 15000))
                             );
 
                             if (existingIndex > -1) {
-                                // Update/Replace matching task
                                 const newList = [...prev];
                                 newList[existingIndex] = newTask;
                                 return newList;
                             } else {
-                                // Add truly new task from other device
+                                if (prev.some(t => t.id === newTask.id)) return prev;
                                 return [newTask, ...prev];
                             }
                         };
