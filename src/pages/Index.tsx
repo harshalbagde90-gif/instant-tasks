@@ -532,18 +532,24 @@ const Index = () => {
             text,
             completed: false,
             createdAt: Date.now(),
-            // Only assign dueDate if specifically in day-to-day mode
             dueDate: (appMode === 'advanced' && advancedViewMode === 'day-to-day')
                 ? selectedDate.toISOString()
                 : undefined
         };
 
-        setTasks(prev => [...prev, newTask]);
+        // Build the full updated list correctly (avoids stale closure)
+        const currentTasks = appMode === 'basic' ? basicTasks : appMode === 'customize' ? customizeTasks : advancedTasks;
+        const updatedList = [...currentTasks, newTask];
+        setTasks(updatedList);
 
-        // If logged in, sync to Supabase
+        // Sync to Supabase
         if (user) {
             const mode = appMode === 'basic' ? 'basic' : appMode === 'customize' ? 'customize' : 'advanced';
-            await supabaseSync.syncTasksToSupabase(user.id, [...tasks, newTask], mode);
+            const result = await supabaseSync.syncTasksToSupabase(user.id, updatedList, mode);
+            if (!result.success) {
+                console.error('Sync failed for addTask:', result.error);
+                toast.warning('⚠️ Task saved locally but cloud sync failed. Check connection.');
+            }
         }
 
         const dateStr = appMode === 'advanced' && advancedViewMode === 'day-to-day'
@@ -553,24 +559,34 @@ const Index = () => {
     };
 
     const toggleTask = async (id: string) => {
-        const updatedTasks = tasks.map(t => t.id === id ? { ...t, completed: !t.completed } : t);
+        const currentTasks = appMode === 'basic' ? basicTasks : appMode === 'customize' ? customizeTasks : advancedTasks;
+        const updatedTasks = currentTasks.map(t => t.id === id ? { ...t, completed: !t.completed } : t);
         setTasks(updatedTasks);
 
         if (user) {
             const mode = appMode === 'basic' ? 'basic' : appMode === 'customize' ? 'customize' : 'advanced';
-            await supabaseSync.syncTasksToSupabase(user.id, updatedTasks, mode);
+            const result = await supabaseSync.syncTasksToSupabase(user.id, updatedTasks, mode);
+            if (!result.success) {
+                console.error('Sync failed for toggleTask:', result.error);
+                toast.warning('⚠️ Status saved locally but cloud sync failed.');
+            }
         }
     };
 
     const deleteTask = async (id: string) => {
-        const updatedTasks = tasks.filter(t => t.id !== id);
+        const currentTasks = appMode === 'basic' ? basicTasks : appMode === 'customize' ? customizeTasks : advancedTasks;
+        const updatedTasks = currentTasks.filter(t => t.id !== id);
         setTasks(updatedTasks);
         if (selectedTaskId === id) setSelectedTaskId(null);
         toast.error("Task deleted");
 
         if (user) {
             const mode = appMode === 'basic' ? 'basic' : appMode === 'customize' ? 'customize' : 'advanced';
-            await supabaseSync.syncTasksToSupabase(user.id, updatedTasks, mode);
+            const result = await supabaseSync.syncTasksToSupabase(user.id, updatedTasks, mode);
+            if (!result.success) {
+                console.error('Sync failed for deleteTask:', result.error);
+                toast.warning('⚠️ Task deleted locally but cloud sync failed.');
+            }
         }
     };
 
@@ -682,17 +698,19 @@ const Index = () => {
     const updateTask = async (id: string, updates: Partial<Task>) => {
         console.log('🔧 [Update Debug] updateTask called with ID:', id, 'Updates:', updates);
 
-        let updatedTasksList: Task[] = [];
-        setTasks(prev => {
-            updatedTasksList = prev.map(task =>
-                task.id === id ? { ...task, ...updates } : task
-            );
-            return updatedTasksList;
-        });
+        const currentTasks = appMode === 'basic' ? basicTasks : appMode === 'customize' ? customizeTasks : advancedTasks;
+        const updatedTasksList = currentTasks.map(task =>
+            task.id === id ? { ...task, ...updates } : task
+        );
+        setTasks(updatedTasksList);
 
         if (user && updatedTasksList.length > 0) {
             const mode = appMode === 'basic' ? 'basic' : appMode === 'customize' ? 'customize' : 'advanced';
-            await supabaseSync.syncTasksToSupabase(user.id, updatedTasksList, mode);
+            const result = await supabaseSync.syncTasksToSupabase(user.id, updatedTasksList, mode);
+            if (!result.success) {
+                console.error('Sync failed for updateTask:', result.error);
+                toast.warning('⚠️ Changes saved locally but cloud sync failed.');
+            }
         }
     };
 
