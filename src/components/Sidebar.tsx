@@ -319,7 +319,14 @@ export function Sidebar({
                                 {/* ADVANCED MODE DROPDOWN */}
                                 <div className="space-y-1">
                                     <button
-                                        onClick={() => setIsAdvancedOpen(!isAdvancedOpen)}
+                                        onClick={() => {
+                                            if (!user) {
+                                                onAuthClick?.();
+                                                toast.info('Login Required for Advanced Mode');
+                                                return;
+                                            }
+                                            setIsAdvancedOpen(!isAdvancedOpen);
+                                        }}
                                         className={cn(
                                             "w-full flex items-center justify-between p-3.5 rounded-xl transition-all duration-300 group",
                                             isAdvancedOpen ? "bg-primary/5 text-white border border-primary/20" : "text-zinc-500 hover:bg-white/[0.02] hover:text-zinc-300 border border-transparent"
@@ -427,7 +434,14 @@ export function Sidebar({
                                 {/* BIG DATA DROPDOWN */}
                                 <div className="space-y-1">
                                     <button
-                                        onClick={() => setIsBigDataOpen(!isBigDataOpen)}
+                                        onClick={() => {
+                                            if (!user) {
+                                                onAuthClick?.();
+                                                toast.info('Login Required for Big Data Mode');
+                                                return;
+                                            }
+                                            setIsBigDataOpen(!isBigDataOpen);
+                                        }}
                                         className={cn(
                                             "w-full flex items-center justify-between p-3.5 rounded-xl transition-all duration-300 group",
                                             isBigDataOpen ? "bg-primary/5 text-white border border-primary/20" : "text-zinc-500 hover:bg-white/[0.02] hover:text-zinc-300 border border-transparent"
@@ -482,7 +496,14 @@ export function Sidebar({
                                 {/* CUSTOMIZE TASK DROPDOWN */}
                                 <div className="space-y-1">
                                     <button
-                                        onClick={() => setIsCustomizeOpen(!isCustomizeOpen)}
+                                        onClick={() => {
+                                            if (!user) {
+                                                onAuthClick?.();
+                                                toast.info('Login Required for Customize Mode');
+                                                return;
+                                            }
+                                            setIsCustomizeOpen(!isCustomizeOpen);
+                                        }}
                                         className={cn(
                                             "w-full flex items-center justify-between p-3.5 rounded-xl transition-all duration-300 group",
                                             isCustomizeOpen ? "bg-primary/5 text-white border border-primary/20" : "text-zinc-500 hover:bg-white/[0.02] hover:text-zinc-300 border border-transparent"

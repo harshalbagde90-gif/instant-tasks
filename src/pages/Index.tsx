@@ -152,6 +152,10 @@ const Index = () => {
     // 🔑 Guard: ensures cloud sync runs ONLY ONCE per app lifecycle
     // useRef because it persists across re-renders without causing them
     const cloudSyncDone = useRef(false);
+    const lastCategoriesSynced = useRef('');
+    const lastTagsSynced = useRef('');
+    const lastBigDataSynced = useRef('');
+    const [cloudBootstrapComplete, setCloudBootstrapComplete] = useState(false);
 
     const [selectedDate, setSelectedDate] = useState<Date>(new Date());
     const [weekStartDate, setWeekStartDate] = useState<Date>(startOfWeek(new Date(), { weekStartsOn: 0 }));
@@ -185,7 +189,19 @@ const Index = () => {
         }
     }, [user, pendingMode]);
 
+    // Non-auth users can only stay in basic mode
+    useEffect(() => {
+        if (!user && appMode !== 'basic') {
+            setAppMode('basic');
+        }
+    }, [user, appMode, setAppMode]);
+
     const handleTaskJump = (taskId: string) => {
+        if (!user) {
+            setIsAuthModalOpen(true);
+            return;
+        }
+
         const task = tasks.find(t => t.id === taskId);
         if (!task) return;
 
@@ -205,6 +221,11 @@ const Index = () => {
     };
 
     const handleSheetJump = (mode: string, sheetId: string) => {
+        if (!user) {
+            setIsAuthModalOpen(true);
+            return;
+        }
+
         setAppMode('big-data');
         setActiveMode(mode as any);
 
@@ -287,12 +308,29 @@ const Index = () => {
             setUser(session?.user ?? null);
         });
 
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
             setUser(session?.user ?? null);
+
+            if (event === 'SIGNED_OUT') {
+                guestDataUtils.setCloudOnlyModeActive(false);
+                guestDataUtils.clearCloudCachedData();
+
+                setAppMode('basic');
+                setPendingMode(null);
+                setBasicTasks([]);
+                setAdvancedTasks([]);
+                setCustomizeTasks([]);
+                setCategories(DEFAULT_CATEGORIES);
+                setAvailableTags(DEFAULT_TAGS);
+                setBigDataWorkspaces({});
+                localStorage.setItem('big-data-workspaces', JSON.stringify({}));
+
+                window.location.reload();
+            }
         });
 
         return () => subscription.unsubscribe();
-    }, []);
+    }, [setBasicTasks, setAdvancedTasks, setCustomizeTasks, setCategories, setAvailableTags]);
 
     // Check and clear expired guest data on mount
     useEffect(() => {
@@ -302,103 +340,201 @@ const Index = () => {
         }
     }, []);
 
-    // Handle login migration + cloud data load — runs EXACTLY ONCE per session
+        // Handle login migration + cloud data load - runs exactly once per session
     useEffect(() => {
-        // If no user, reset the guard (user logged out)
+        // If no user, reset guards (user logged out)
         if (!user) {
+            if (localStorage.getItem(guestDataUtils.CLOUD_ONLY_MODE_KEY) === 'true') {
+                guestDataUtils.setCloudOnlyModeActive(false);
+                guestDataUtils.clearCloudCachedData();
+            }
             cloudSyncDone.current = false;
+            setCloudBootstrapComplete(false);
+            lastCategoriesSynced.current = '';
+            lastTagsSynced.current = '';
+            lastBigDataSynced.current = '';
             return;
         }
 
-        // 🔑 KEY GUARD: if already ran, skip — even if Supabase fires user change multiple times
+        // Key guard: skip if already initialized for this session
         if (cloudSyncDone.current) return;
-        cloudSyncDone.current = true; // Mark immediately before any async work
+        cloudSyncDone.current = true;
+        setCloudBootstrapComplete(false);
 
-        if (guestDataUtils.hasGuestData()) {
-            // User just logged in WITH local guest data → migrate to Supabase
-            // Clear guest data flag FIRST (synchronously) to prevent re-entry
-            guestDataUtils.resetGuestWarningState();
+        const loadCloudData = async () => {
+            console.log('Loading tasks from Supabase for user:', user.id);
 
-            const migrateData = async () => {
-                toast.dismiss();
-                setIsMigrationOpen(true);
-                setIsMigrationComplete(false);
+            const settled = await Promise.allSettled([
+                supabaseSync.loadTasksFromSupabase(user.id, 'basic'),
+                supabaseSync.loadTasksFromSupabase(user.id, 'advanced'),
+                supabaseSync.loadTasksFromSupabase(user.id, 'customize'),
+                supabaseSync.loadCategoriesFromSupabase(user.id),
+                supabaseSync.loadTagsFromSupabase(user.id),
+                supabaseSync.loadBigDataWorkspacesFromSupabase(user.id)
+            ]);
 
-                try {
+            const [
+                basicResult,
+                advancedResult,
+                customizeResult,
+                categoriesResult,
+                tagsResult,
+                bigDataResult
+            ] = settled;
+
+            const cloudBasicTasks = basicResult.status === 'fulfilled' ? basicResult.value : [];
+            const cloudAdvancedTasks = advancedResult.status === 'fulfilled' ? advancedResult.value : [];
+            const cloudCustomizeTasks = customizeResult.status === 'fulfilled' ? customizeResult.value : [];
+            const cloudCategories = categoriesResult.status === 'fulfilled' ? categoriesResult.value : [];
+            const cloudTags = tagsResult.status === 'fulfilled' ? tagsResult.value : [];
+            const cloudBigData = bigDataResult.status === 'fulfilled' ? bigDataResult.value : {};
+
+            const failedParts = settled.filter(result => result.status === 'rejected').length;
+            if (failedParts > 0) {
+                console.warn(`Cloud load partially failed (${failedParts}/6).`, settled);
+                toast.warning('Some cloud data failed to load. Retrying in background.');
+            }
+
+            const resolvedCategories = cloudCategories.length > 0 ? cloudCategories : DEFAULT_CATEGORIES;
+            const resolvedTags = cloudTags.length > 0 ? cloudTags : DEFAULT_TAGS;
+            const resolvedBigData = cloudBigData || {};
+
+            // Supabase is source of truth for logged-in users
+            setBasicTasks(cloudBasicTasks);
+            setAdvancedTasks(cloudAdvancedTasks);
+            setCustomizeTasks(cloudCustomizeTasks);
+            setCategories(resolvedCategories);
+            setAvailableTags(resolvedTags);
+            setBigDataWorkspaces(resolvedBigData);
+            localStorage.setItem('big-data-workspaces', JSON.stringify(resolvedBigData));
+
+            lastCategoriesSynced.current = cloudCategories.length > 0 ? JSON.stringify(resolvedCategories) : '';
+            lastTagsSynced.current = cloudTags.length > 0 ? JSON.stringify(resolvedTags) : '';
+            lastBigDataSynced.current = JSON.stringify(resolvedBigData);
+            guestDataUtils.setCloudOnlyModeActive(true);
+            guestDataUtils.clearCloudCachedData();
+            setCloudBootstrapComplete(true);
+        };
+
+        const initializeCloudSync = async () => {
+            try {
+                if (guestDataUtils.hasGuestData()) {
+                    // User logged in with local guest data -> migrate once
+                    guestDataUtils.resetGuestWarningState();
+
+                    toast.dismiss();
+                    setIsMigrationOpen(true);
+                    setIsMigrationComplete(false);
+
                     const result = await supabaseSync.migrateLocalDataToSupabase(
                         user.id,
                         basicTasks,
                         advancedTasks,
+                        customizeTasks,
                         categories,
-                        availableTags
+                        availableTags,
+                        bigDataWorkspaces
                     );
 
-                    if (result.success) {
-                        guestDataUtils.clearGuestData(); // ONLY Clear after confirmed success
-                        setIsMigrationComplete(true);
-                        setTimeout(() => {
-                            setIsMigrationOpen(false);
-                            setIsMigrationComplete(false);
-                        }, 2500);
-                    } else {
+                    if (!result.success) {
                         setIsMigrationOpen(false);
+                        setCloudBootstrapComplete(false);
                         cloudSyncDone.current = false;
+                        return;
                     }
-                } catch (error) {
-                    console.error('Migration error:', error);
-                    setIsMigrationOpen(false);
-                    cloudSyncDone.current = false;
+
+                    guestDataUtils.clearGuestData();
+                    await loadCloudData();
+
+                    setIsMigrationComplete(true);
+                    setTimeout(() => {
+                        setIsMigrationOpen(false);
+                        setIsMigrationComplete(false);
+                    }, 2500);
+                    return;
                 }
-            };
-            migrateData();
 
-        } else {
-            // User is logged in, no guest data → load fresh from Supabase ONCE
-            const loadCloudData = async () => {
-                try {
-                    console.log('🔄 Loading tasks from Supabase for user:', user.id);
+                await loadCloudData();
+            } catch (error) {
+                console.error('Cloud initialization error:', error);
+                setCloudBootstrapComplete(false);
+                cloudSyncDone.current = false;
+            }
+        };
 
-                    const [
-                        cloudBasicTasks,
-                        cloudAdvancedTasks,
-                        cloudCustomizeTasks,
-                        cloudCategories,
-                        cloudTags
-                    ] = await Promise.all([
-                        supabaseSync.loadTasksFromSupabase(user.id, 'basic'),
-                        supabaseSync.loadTasksFromSupabase(user.id, 'advanced'),
-                        supabaseSync.loadTasksFromSupabase(user.id, 'customize'),
-                        supabaseSync.loadCategoriesFromSupabase(user.id),
-                        supabaseSync.loadTagsFromSupabase(user.id)
-                    ]);
-
-                    console.log('✅ Loaded from Supabase:', {
-                        basic: cloudBasicTasks.length,
-                        advanced: cloudAdvancedTasks.length,
-                        customize: cloudCustomizeTasks.length,
-                    });
-
-                    // Supabase is source of truth for logged-in users
-                    setBasicTasks(cloudBasicTasks);
-                    setAdvancedTasks(cloudAdvancedTasks);
-                    setCustomizeTasks(cloudCustomizeTasks);
-                    if (cloudCategories.length > 0) setCategories(cloudCategories);
-                    if (cloudTags.length > 0) setAvailableTags(cloudTags);
-
-                } catch (error) {
-                    console.error('❌ Error loading cloud data:', error);
-                    cloudSyncDone.current = false; // Allow retry on error
-                }
-            };
-
-            loadCloudData();
-        }
+        void initializeCloudSync();
     }, [user]);
 
 
 
 
     // 🚀 Real-time Cloud Sync Subscription
+    useEffect(() => {
+        if (!user || !cloudBootstrapComplete) return;
+
+        const payload = JSON.stringify(categories);
+        if (payload === lastCategoriesSynced.current) return;
+
+        const timer = setTimeout(async () => {
+            const result = await supabaseSync.saveCategoriesToSupabase(user.id, categories);
+            if (result.success) {
+                const freshCategories = await supabaseSync.loadCategoriesFromSupabase(user.id);
+                if (freshCategories.length > 0) {
+                    lastCategoriesSynced.current = JSON.stringify(freshCategories);
+                    setCategories(freshCategories);
+                } else {
+                    lastCategoriesSynced.current = payload;
+                }
+            } else {
+                toast.warning('Categories saved locally but cloud sync failed.');
+            }
+        }, 600);
+
+        return () => clearTimeout(timer);
+    }, [user, cloudBootstrapComplete, categories]);
+
+    useEffect(() => {
+        if (!user || !cloudBootstrapComplete) return;
+
+        const payload = JSON.stringify(availableTags);
+        if (payload === lastTagsSynced.current) return;
+
+        const timer = setTimeout(async () => {
+            const result = await supabaseSync.saveTagsToSupabase(user.id, availableTags);
+            if (result.success) {
+                const freshTags = await supabaseSync.loadTagsFromSupabase(user.id);
+                if (freshTags.length > 0) {
+                    lastTagsSynced.current = JSON.stringify(freshTags);
+                    setAvailableTags(freshTags);
+                } else {
+                    lastTagsSynced.current = payload;
+                }
+            } else {
+                toast.warning('Tags saved locally but cloud sync failed.');
+            }
+        }, 600);
+
+        return () => clearTimeout(timer);
+    }, [user, cloudBootstrapComplete, availableTags]);
+
+    useEffect(() => {
+        if (!user || !cloudBootstrapComplete) return;
+
+        const payload = JSON.stringify(bigDataWorkspaces || {});
+        if (payload === lastBigDataSynced.current) return;
+
+        const timer = setTimeout(async () => {
+            const result = await supabaseSync.saveBigDataWorkspacesToSupabase(user.id, bigDataWorkspaces || {});
+            if (result.success) {
+                lastBigDataSynced.current = payload;
+            } else {
+                toast.warning('Big Data workspace saved locally but cloud sync failed.');
+            }
+        }, 900);
+
+        return () => clearTimeout(timer);
+    }, [user, cloudBootstrapComplete, bigDataWorkspaces]);
+
     useEffect(() => {
         if (!user) return;
 
@@ -417,6 +553,7 @@ const Index = () => {
                     console.log('📡 Real-time update received:', payload.eventType, payload);
 
                     const mapRowToTask = (row: any): Task => ({
+                        category: categories.find(c => c.id === row.category_id)?.name,
                         id: row.id,
                         text: row.title,
                         description: row.description || undefined,
@@ -471,7 +608,7 @@ const Index = () => {
         return () => {
             supabase.removeChannel(channel);
         };
-    }, [user]);
+    }, [user, categories]);
 
     const getGreeting = (date: Date) => {
         const hour = date.getHours();
@@ -595,7 +732,7 @@ const Index = () => {
 
         if (user) {
             const mode = appMode === 'basic' ? 'basic' : appMode === 'customize' ? 'customize' : 'advanced';
-            const result = await supabaseSync.upsertTaskToSupabase(user.id, newTask, mode);
+            const result = await supabaseSync.upsertTaskToSupabase(user.id, newTask, mode, categories);
             if (!result.success) {
                 toast.warning('⚠️ Cloud sync failed. Task saved locally.');
             }
@@ -618,7 +755,7 @@ const Index = () => {
 
         if (user) {
             const mode = appMode === 'basic' ? 'basic' : appMode === 'customize' ? 'customize' : 'advanced';
-            const result = await supabaseSync.upsertTaskToSupabase(user.id, updatedTask, mode);
+            const result = await supabaseSync.upsertTaskToSupabase(user.id, updatedTask, mode, categories);
             if (!result.success) {
                 toast.warning('⚠️ Sync failed. Status saved locally.');
             }
@@ -635,6 +772,49 @@ const Index = () => {
             const result = await supabaseSync.deleteTaskFromSupabase(user.id, id);
             if (!result.success) {
                 toast.warning('⚠️ Task deleted locally but cloud sync failed.');
+            }
+        }
+    };
+
+    const createCustomizeTask = async (task: Task) => {
+        if (!user && !guestDataUtils.hasSeenGuestWarning()) {
+            guestDataUtils.initializeGuestDataTimestamp();
+            guestDataUtils.markGuestWarningAsShown();
+            setIsGuestWarningOpen(true);
+        }
+
+        setCustomizeTasks(prev => [task, ...prev]);
+
+        if (user) {
+            const result = await supabaseSync.upsertTaskToSupabase(user.id, task, 'customize', categories);
+            if (!result.success) {
+                toast.warning('Cloud sync failed. Task saved locally.');
+            }
+        }
+    };
+
+    const updateCustomizeTask = async (id: string, updates: Partial<Task>) => {
+        const existing = customizeTasks.find(t => t.id === id);
+        if (!existing) return;
+
+        const updatedTask = { ...existing, ...updates };
+        setCustomizeTasks(prev => prev.map(t => t.id === id ? updatedTask : t));
+
+        if (user) {
+            const result = await supabaseSync.upsertTaskToSupabase(user.id, updatedTask, 'customize', categories);
+            if (!result.success) {
+                toast.warning('Changes saved locally but cloud sync failed.');
+            }
+        }
+    };
+
+    const deleteCustomizeTask = async (id: string) => {
+        setCustomizeTasks(prev => prev.filter(t => t.id !== id));
+
+        if (user) {
+            const result = await supabaseSync.deleteTaskFromSupabase(user.id, id);
+            if (!result.success) {
+                toast.warning('Task deleted locally but cloud sync failed.');
             }
         }
     };
@@ -755,7 +935,7 @@ const Index = () => {
 
         if (user) {
             const mode = appMode === 'basic' ? 'basic' : appMode === 'customize' ? 'customize' : 'advanced';
-            const result = await supabaseSync.upsertTaskToSupabase(user.id, updatedTask, mode);
+            const result = await supabaseSync.upsertTaskToSupabase(user.id, updatedTask, mode, categories);
             if (!result.success) {
                 toast.warning('⚠️ Changes saved locally but cloud sync failed.');
             }
@@ -763,25 +943,44 @@ const Index = () => {
     };
 
     const handleUndoTask = useCallback((id: string) => {
+        let revertedTask: Task | null = null;
+
         setTasks(prev => prev.map(task => {
             if (task.id === id && task.previousText) {
-                return { ...task, text: task.previousText, previousText: undefined };
+                revertedTask = { ...task, text: task.previousText, previousText: undefined };
+                return revertedTask;
             }
             return task;
         }));
+
+        if (user && revertedTask) {
+            const mode = appMode === 'basic' ? 'basic' : appMode === 'customize' ? 'customize' : 'advanced';
+            void supabaseSync.upsertTaskToSupabase(user.id, revertedTask, mode, categories);
+        }
+
         toast.success('Changes reverted');
-    }, [setTasks]);
+    }, [setTasks, user, appMode, categories]);
 
     const handleRefresh = () => {
         setIsRefreshing(true);
         setTimeout(() => setIsRefreshing(false), 1000);
     };
 
-    const handleBulkDelete = () => {
-        setTasks(prev => prev.filter(t => !tasksToDelete.includes(t.id)));
+    const handleBulkDelete = async () => {
+        const idsToDelete = [...tasksToDelete];
+        setTasks(prev => prev.filter(t => !idsToDelete.includes(t.id)));
         setTasksToDelete([]);
         setIsResetDialogOpen(false);
         toast.error(`${tasksToDelete.length} missions terminated`);
+
+        if (user && idsToDelete.length > 0) {
+            const results = await Promise.all(
+                idsToDelete.map(id => supabaseSync.deleteTaskFromSupabase(user.id, id))
+            );
+            if (results.some(result => !result.success)) {
+                toast.warning('Some deleted tasks failed to sync with cloud.');
+            }
+        }
     };
 
     const toggleSelectAll = () => {
@@ -792,30 +991,94 @@ const Index = () => {
         }
     };
 
-    const handleRenameItem = (oldName: string, newName: string) => {
-        const updateList = (list: Task[]) => list.map(task => {
-            if (manageType === 'categories') {
-                if (task.category === oldName) return { ...task, category: newName };
-            } else {
-                if (task.tags?.includes(oldName)) return { ...task, tags: task.tags.map(t => t === oldName ? newName : t) };
-            }
-            return task;
-        });
-        setBasicTasks(prev => updateList(prev));
-        setAdvancedTasks(prev => updateList(prev));
+    const syncChangedTasks = async (
+        mode: 'basic' | 'advanced' | 'customize',
+        changedTasks: Task[],
+        categorySnapshot: Category[] = categories
+    ) => {
+        if (!user || changedTasks.length === 0) return;
+
+        const results = await Promise.all(
+            changedTasks.map(task => supabaseSync.upsertTaskToSupabase(user.id, task, mode, categorySnapshot))
+        );
+
+        if (results.some(result => !result.success)) {
+            toast.warning('Some updated tasks could not be synced to cloud.');
+        }
     };
 
-    const handleDeleteItem = (name: string) => {
-        const updateList = (list: Task[]) => list.map(task => {
-            if (manageType === 'categories') {
-                if (task.category === name) return { ...task, category: undefined };
-            } else {
-                if (task.tags?.includes(name)) return { ...task, tags: task.tags.filter(t => t !== name) };
-            }
-            return task;
-        });
-        setBasicTasks(prev => updateList(prev));
-        setAdvancedTasks(prev => updateList(prev));
+    const handleRenameItem = async (oldName: string, newName: string) => {
+        const updateList = (list: Task[]) => {
+            const changed: Task[] = [];
+            const updated = list.map(task => {
+                if (manageType === 'categories') {
+                    if (task.category === oldName) {
+                        const nextTask = { ...task, category: newName };
+                        changed.push(nextTask);
+                        return nextTask;
+                    }
+                } else if (task.tags?.includes(oldName)) {
+                    const nextTask = { ...task, tags: task.tags.map(t => t === oldName ? newName : t) };
+                    changed.push(nextTask);
+                    return nextTask;
+                }
+                return task;
+            });
+            return { updated, changed };
+        };
+
+        const basicResult = updateList(basicTasks);
+        const advancedResult = updateList(advancedTasks);
+        const customizeResult = updateList(customizeTasks);
+
+        setBasicTasks(basicResult.updated);
+        setAdvancedTasks(advancedResult.updated);
+        setCustomizeTasks(customizeResult.updated);
+
+        const categorySnapshot = manageType === 'categories'
+            ? categories.map(item => item.name === oldName ? { ...item, name: newName } : item)
+            : categories;
+
+        await Promise.all([
+            syncChangedTasks('basic', basicResult.changed, categorySnapshot),
+            syncChangedTasks('advanced', advancedResult.changed, categorySnapshot),
+            syncChangedTasks('customize', customizeResult.changed, categorySnapshot),
+        ]);
+    };
+
+    const handleDeleteItem = async (name: string) => {
+        const updateList = (list: Task[]) => {
+            const changed: Task[] = [];
+            const updated = list.map(task => {
+                if (manageType === 'categories') {
+                    if (task.category === name) {
+                        const nextTask = { ...task, category: undefined };
+                        changed.push(nextTask);
+                        return nextTask;
+                    }
+                } else if (task.tags?.includes(name)) {
+                    const nextTask = { ...task, tags: task.tags.filter(t => t !== name) };
+                    changed.push(nextTask);
+                    return nextTask;
+                }
+                return task;
+            });
+            return { updated, changed };
+        };
+
+        const basicResult = updateList(basicTasks);
+        const advancedResult = updateList(advancedTasks);
+        const customizeResult = updateList(customizeTasks);
+
+        setBasicTasks(basicResult.updated);
+        setAdvancedTasks(advancedResult.updated);
+        setCustomizeTasks(customizeResult.updated);
+
+        await Promise.all([
+            syncChangedTasks('basic', basicResult.changed),
+            syncChangedTasks('advanced', advancedResult.changed),
+            syncChangedTasks('customize', customizeResult.changed),
+        ]);
     };
 
     const completionPercentage = visibleTasks.length > 0 ? Math.round((completedTasks.length / visibleTasks.length) * 100) : 0;
@@ -1499,6 +1762,9 @@ const Index = () => {
                             <CustomizeTaskView
                                 tasks={customizeTasks}
                                 setTasks={setCustomizeTasks}
+                                onCreateTask={createCustomizeTask}
+                                onUpdateTask={updateCustomizeTask}
+                                onDeleteTask={deleteCustomizeTask}
                                 categories={categories}
                                 availableTags={availableTags}
                                 onManageCategories={() => { setManageType('categories'); setIsManageModalOpen(true); }}
@@ -1783,3 +2049,4 @@ const TaskItemView = ({
 };
 
 export default Index;
+

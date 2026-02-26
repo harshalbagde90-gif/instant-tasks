@@ -22,6 +22,9 @@ interface Props {
     availableTags: TagType[];
     onManageCategories: () => void;
     onManageTags: () => void;
+    onCreateTask?: (task: Task) => void | Promise<void>;
+    onUpdateTask?: (taskId: string, updates: Partial<Task>) => void | Promise<void>;
+    onDeleteTask?: (taskId: string) => void | Promise<void>;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -554,11 +557,19 @@ function CustomizeTaskCard({
 // ─── Main View ────────────────────────────────────────────────────────────────
 
 export const CustomizeTaskView: React.FC<Props> = ({
-    tasks, setTasks, categories, availableTags, onManageCategories, onManageTags,
+    tasks,
+    setTasks,
+    categories,
+    availableTags,
+    onManageCategories,
+    onManageTags,
+    onCreateTask,
+    onUpdateTask,
+    onDeleteTask,
 }) => {
     const [newTaskText, setNewTaskText] = useState('');
 
-    const addTask = () => {
+    const addTask = async () => {
         if (!newTaskText.trim()) return;
         const newTask: Task = {
             id: crypto.randomUUID(),
@@ -570,17 +581,31 @@ export const CustomizeTaskView: React.FC<Props> = ({
             category: 'Mission',
             priority: 'medium',
         };
-        setTasks(prev => [newTask, ...prev]);
+
+        if (onCreateTask) {
+            await onCreateTask(newTask);
+        } else {
+            setTasks(prev => [newTask, ...prev]);
+        }
+
         setNewTaskText('');
         toast.success('Task Created!', { description: 'Add subtasks and set a deadline below.' });
     };
 
     const updateTask = (id: string, updates: Partial<Task>) => {
+        if (onUpdateTask) {
+            void onUpdateTask(id, updates);
+            return;
+        }
         setTasks(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
     };
 
     const deleteTask = (id: string) => {
-        setTasks(prev => prev.filter(t => t.id !== id));
+        if (onDeleteTask) {
+            void onDeleteTask(id);
+        } else {
+            setTasks(prev => prev.filter(t => t.id !== id));
+        }
         toast.error('Task Deleted');
     };
 
@@ -595,12 +620,12 @@ export const CustomizeTaskView: React.FC<Props> = ({
                 <input
                     value={newTaskText}
                     onChange={e => setNewTaskText(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter') addTask(); }}
+                    onKeyDown={e => { if (e.key === 'Enter') void addTask(); }}
                     placeholder="TYPE YOUR MISSION..."
                     className="flex-1 bg-transparent text-sm font-bold text-foreground placeholder:text-muted-foreground/40 placeholder:uppercase placeholder:tracking-widest outline-none"
                 />
                 {newTaskText && (
-                    <Button onClick={addTask}
+                    <Button onClick={() => void addTask()}
                         className="rounded-xl h-9 px-5 text-[10px] font-black uppercase tracking-widest bg-primary text-primary-foreground hover:bg-primary/90">
                         ENTER
                     </Button>
