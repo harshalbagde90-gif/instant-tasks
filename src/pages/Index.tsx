@@ -365,33 +365,32 @@ const Index = () => {
             console.log('Loading tasks from Supabase for user:', user.id);
 
             const settled = await Promise.allSettled([
-                supabaseSync.loadTasksFromSupabase(user.id, 'basic'),
-                supabaseSync.loadTasksFromSupabase(user.id, 'advanced'),
-                supabaseSync.loadTasksFromSupabase(user.id, 'customize'),
+                supabaseSync.loadAllTasksFromSupabase(user.id),
                 supabaseSync.loadCategoriesFromSupabase(user.id),
                 supabaseSync.loadTagsFromSupabase(user.id),
                 supabaseSync.loadBigDataWorkspacesFromSupabase(user.id)
             ]);
 
             const [
-                basicResult,
-                advancedResult,
-                customizeResult,
+                tasksByModeResult,
                 categoriesResult,
                 tagsResult,
                 bigDataResult
             ] = settled;
 
-            const cloudBasicTasks = basicResult.status === 'fulfilled' ? basicResult.value : [];
-            const cloudAdvancedTasks = advancedResult.status === 'fulfilled' ? advancedResult.value : [];
-            const cloudCustomizeTasks = customizeResult.status === 'fulfilled' ? customizeResult.value : [];
+            const cloudTasksByMode = tasksByModeResult.status === 'fulfilled'
+                ? tasksByModeResult.value
+                : { basic: [], advanced: [], customize: [] };
+            const cloudBasicTasks = cloudTasksByMode.basic;
+            const cloudAdvancedTasks = cloudTasksByMode.advanced;
+            const cloudCustomizeTasks = cloudTasksByMode.customize;
             const cloudCategories = categoriesResult.status === 'fulfilled' ? categoriesResult.value : [];
             const cloudTags = tagsResult.status === 'fulfilled' ? tagsResult.value : [];
             const cloudBigData = bigDataResult.status === 'fulfilled' ? bigDataResult.value : {};
 
             const failedParts = settled.filter(result => result.status === 'rejected').length;
             if (failedParts > 0) {
-                console.warn(`Cloud load partially failed (${failedParts}/6).`, settled);
+                console.warn(`Cloud load partially failed (${failedParts}/4).`, settled);
                 toast.warning('Some cloud data failed to load. Retrying in background.');
             }
 

@@ -114,20 +114,60 @@ export async function deleteTaskFromSupabase(userId: string, taskId: string) {
 }
 
 export async function loadTasksFromSupabase(userId: string, mode: TaskMode): Promise<Task[]> {
-    try {
-        const { data, error } = await supabase
+    const grouped = await loadAllTasksFromSupabase(userId);
+    return grouped[mode];
+}
+
+function normalizeMode(mode: unknown): TaskMode {
+    if (mode === 'basic' || mode === 'advanced' || mode === 'customize') {
+        return mode;
+    }
+    return 'advanced';
+}
+
+async function fetchTaskRows(userId: string) {
+    const runQuery = (withCategoryJoin: boolean) => {
+        return supabase
             .from('tasks')
-            .select('*, categories(name)')
+            .select(withCategoryJoin ? '*, categories(name)' : '*')
             .eq('user_id', userId)
-            .eq('mode', mode)
             .order('created_at', { ascending: false });
+    };
 
-        if (error) throw error;
+    let { data, error } = await runQuery(true);
+    if (error) {
+        console.warn('Tasks query with categories join failed. Retrying without join.', error);
+        const fallback = await runQuery(false);
+        data = fallback.data;
+        error = fallback.error;
+    }
+    if (error) throw error;
 
-        return (data || []).map(mapTaskRowToTask);
+    return data || [];
+}
+
+export async function loadAllTasksFromSupabase(userId: string): Promise<Record<TaskMode, Task[]>> {
+    try {
+        const rows = await fetchTaskRows(userId);
+        const grouped: Record<TaskMode, Task[]> = {
+            basic: [],
+            advanced: [],
+            customize: []
+        };
+
+        for (const row of rows) {
+            const mode = normalizeMode((row as any).mode);
+            grouped[mode].push(mapTaskRowToTask(row));
+        }
+
+        return grouped;
     } catch (error) {
         console.error('Error loading tasks:', error);
-        return [];
+        return {
+            basic: [],
+            advanced: [],
+            customize: []
+        };
     }
 }
 

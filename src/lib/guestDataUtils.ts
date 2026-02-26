@@ -100,14 +100,36 @@ export function getHoursUntilExpiration(): number {
  * Check if there is any guest data
  */
 export function hasGuestData(): boolean {
-    const basicTasks = localStorage.getItem('taskflow-tasks-basic');
-    const advancedTasks = localStorage.getItem('taskflow-tasks-advanced');
-    const customizeTasks = localStorage.getItem('taskflow-tasks-customize');
-    const categories = localStorage.getItem('task-categories');
-    const tags = localStorage.getItem('task-tags');
-    const bigData = localStorage.getItem('big-data-workspaces');
+    const parseArray = (value: string | null) => {
+        if (!value) return [];
+        try {
+            const parsed = JSON.parse(value);
+            return Array.isArray(parsed) ? parsed : [];
+        } catch {
+            return [];
+        }
+    };
 
-    return !!(basicTasks || advancedTasks || customizeTasks || categories || tags || bigData);
+    const parseObject = (value: string | null) => {
+        if (!value) return {};
+        try {
+            const parsed = JSON.parse(value);
+            return parsed && typeof parsed === 'object' ? parsed : {};
+        } catch {
+            return {};
+        }
+    };
+
+    const basicTasks = parseArray(localStorage.getItem('taskflow-tasks-basic'));
+    const advancedTasks = parseArray(localStorage.getItem('taskflow-tasks-advanced'));
+    const customizeTasks = parseArray(localStorage.getItem('taskflow-tasks-customize'));
+    const bigData = parseObject(localStorage.getItem('big-data-workspaces')) as Record<string, unknown[]>;
+    const guestTimestamp = localStorage.getItem(GUEST_DATA_TIMESTAMP_KEY);
+
+    const hasTasks = basicTasks.length > 0 || advancedTasks.length > 0 || customizeTasks.length > 0;
+    const hasBigData = Object.values(bigData).some(value => Array.isArray(value) && value.length > 0);
+
+    return hasTasks || hasBigData || !!guestTimestamp;
 }
 
 /**
