@@ -28,15 +28,17 @@ interface TaskItemProps {
   index: number;
   onToggle: (id: string) => void;
   onUpdate: (id: string, text: string, previousText?: string) => void;
+  onUpdateTask?: (id: string, updates: Partial<Task>) => void;
   onDelete: (id: string) => void;
   onAIAction: (id: string, action: AIAction) => Promise<string | string[]>;
   onAddSubtasks: (parentId: string, subtasks: string[]) => void;
   onUndo: (id: string) => void;
   user?: User | null;
+  userEmail?: string;
   onAuthClick?: () => void;
 }
 
-export function TaskItem({ task, index, onToggle, onUpdate, onDelete, onAIAction, onAddSubtasks, onUndo, user, onAuthClick }: TaskItemProps) {
+export function TaskItem({ task, index, onToggle, onUpdate, onUpdateTask, onDelete, onAIAction, onAddSubtasks, onUndo, user, userEmail, onAuthClick }: TaskItemProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(task.text);
   const [isLoading, setIsLoading] = useState(false);
@@ -271,7 +273,10 @@ export function TaskItem({ task, index, onToggle, onUpdate, onDelete, onAIAction
               isOpen={isReminderDialogOpen}
               onClose={() => setIsReminderDialogOpen(false)}
               task={task}
-              onUpdate={(id, updates) => onUpdate(id, updates as any)} // Cast needed because updates might be full fields
+              userEmail={userEmail}
+              onUpdate={(id, updates) => {
+                if (onUpdateTask) onUpdateTask(id, updates);
+              }}
             />
 
             <DropdownMenu>

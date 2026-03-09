@@ -84,7 +84,7 @@ const SharedTaskView: React.FC = () => {
         } catch {
             // Revert on error
             setCheckedSubtasks(prev => isChecked ? [...prev, subtaskId] : prev.filter(id => id !== subtaskId));
-            toast.error('Save nahi hua. Dobara try karo.');
+            toast.error('Could not save progress. Please try again.');
         } finally {
             setSaving(false);
         }
@@ -114,9 +114,9 @@ const SharedTaskView: React.FC = () => {
                 <div className="w-20 h-20 rounded-3xl bg-red-500/10 border border-red-500/20 flex items-center justify-center mx-auto mb-6">
                     <AlertCircle className="w-10 h-10 text-red-400" />
                 </div>
-                <h1 className="text-xl font-black text-white uppercase tracking-tight mb-2">Task Nahi Mila</h1>
+                <h1 className="text-xl font-black text-white uppercase tracking-tight mb-2">Task Not Found</h1>
                 <p className="text-sm text-zinc-500 font-medium">
-                    Yeh link expired ho gayi hai ya task delete ho gaya hai.
+                    This link has expired or the task was removed.
                 </p>
             </div>
         </div>
@@ -205,6 +205,12 @@ const SharedTaskView: React.FC = () => {
                             Deadline: {format(parseISO(task.deadline), 'dd MMM yyyy, hh:mm a')}
                         </div>
                     )}
+                    {task.notes && task.notes.trim().length > 0 && (
+                        <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4">
+                            <p className="text-[10px] font-black text-zinc-500 uppercase tracking-widest mb-2">Notes</p>
+                            <p className="text-xs text-zinc-300 whitespace-pre-wrap leading-relaxed">{task.notes}</p>
+                        </div>
+                    )}
                 </div>
 
                 {/* Progress Bar */}
@@ -238,7 +244,7 @@ const SharedTaskView: React.FC = () => {
                         <div className="flex items-center gap-2 px-1 mb-3">
                             <div className="w-1.5 h-1.5 rounded-full bg-purple-400" />
                             <h2 className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">
-                                Subtasks — tap karo complete karne ke liye
+                                Subtasks - tap to mark complete
                             </h2>
                         </div>
 
@@ -282,8 +288,8 @@ const SharedTaskView: React.FC = () => {
                 {progress === 100 && (
                     <div className="bg-green-500/10 border border-green-500/30 rounded-2xl p-5 text-center space-y-1 animate-in fade-in duration-500">
                         <p className="text-2xl">🎉</p>
-                        <p className="text-sm font-black text-green-400 uppercase tracking-widest">Sab ho gaya!</p>
-                        <p className="text-[10px] text-zinc-500 font-bold">Saari subtasks complete ho gayi hain.</p>
+                        <p className="text-sm font-black text-green-400 uppercase tracking-widest">All Done!</p>
+                        <p className="text-[10px] text-zinc-500 font-bold">All subtasks are complete.</p>
                     </div>
                 )}
 
@@ -306,3 +312,4 @@ const SharedTaskView: React.FC = () => {
 };
 
 export default SharedTaskView;
+

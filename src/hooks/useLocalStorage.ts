@@ -7,8 +7,6 @@ const CLOUD_BLOCKED_KEYS = new Set([
   'taskflow-tasks-customize',
   'task-categories',
   'task-tags',
-  'app-mode',
-  'advanced-view-mode',
 ]);
 
 export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T | ((val: T) => T)) => void] {

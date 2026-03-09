@@ -43,6 +43,18 @@ const QUICK_DEADLINES = [
     { label: '+1 Week', hours: 168 },
 ];
 
+function resolveTaskDeadline(task: Task): string | undefined {
+    return task.dueDate || task.deadline;
+}
+
+function toDatetimeLocalValue(iso?: string): string {
+    if (!iso) return '';
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return '';
+    const offsetMs = date.getTimezoneOffset() * 60 * 1000;
+    return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
+}
+
 function CategoryIcon({ name, className, style }: { name: string; className?: string; style?: React.CSSProperties }) {
     const Icon = (LucideIcons as any)[name] || Target;
     return <Icon className={className} style={style} />;
@@ -153,7 +165,8 @@ function CustomizeTaskCard({
 }) {
     const [newSubtaskText, setNewSubtaskText] = useState('');
     const [expanded, setExpanded] = useState(true);
-    const [deadlineInput, setDeadlineInput] = useState(task.deadline ? task.deadline.slice(0, 16) : '');
+    const activeDeadline = resolveTaskDeadline(task);
+    const [deadlineInput, setDeadlineInput] = useState(toDatetimeLocalValue(activeDeadline));
     const [showDeadlinePicker, setShowDeadlinePicker] = useState(false);
     const [showShareModal, setShowShareModal] = useState(false);
 
@@ -164,7 +177,11 @@ function CustomizeTaskCard({
 
     const cat = categories.find(c => c.name === (task.category || 'Mission')) || categories[0];
     const priority = task.priority ? PRIORITY_CONFIG[task.priority] : null;
-    const deadlineStatus = task.deadline ? getDeadlineStatus(task.deadline) : null;
+    const deadlineStatus = activeDeadline ? getDeadlineStatus(activeDeadline) : null;
+
+    useEffect(() => {
+        setDeadlineInput(toDatetimeLocalValue(activeDeadline));
+    }, [activeDeadline]);
 
     // Auto-complete main task when all subtasks are done
     useEffect(() => {
@@ -197,19 +214,21 @@ function CustomizeTaskCard({
 
     const applyQuickDeadline = (hours: number) => {
         const d = new Date(Date.now() + hours * 3600 * 1000);
-        onUpdate({ deadline: d.toISOString() });
-        setDeadlineInput(d.toISOString().slice(0, 16));
+        const deadlineIso = d.toISOString();
+        onUpdate({ dueDate: deadlineIso, deadline: deadlineIso });
+        setDeadlineInput(toDatetimeLocalValue(deadlineIso));
         setShowDeadlinePicker(false);
     };
 
     const applyCustomDeadline = () => {
         if (!deadlineInput) return;
-        onUpdate({ deadline: new Date(deadlineInput).toISOString() });
+        const deadlineIso = new Date(deadlineInput).toISOString();
+        onUpdate({ dueDate: deadlineIso, deadline: deadlineIso });
         setShowDeadlinePicker(false);
     };
 
     const clearDeadline = () => {
-        onUpdate({ deadline: undefined });
+        onUpdate({ dueDate: undefined, deadline: undefined });
         setDeadlineInput('');
     };
 
@@ -239,7 +258,19 @@ function CustomizeTaskCard({
                             }
                         </button>
 
-                        <div className="flex-1 min-w-0">
+                        <div
+                            className="flex-1 min-w-0 cursor-pointer"
+                            onClick={() => setExpanded(prev => !prev)}
+                            role="button"
+                            aria-expanded={expanded}
+                            tabIndex={0}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                    e.preventDefault();
+                                    setExpanded(prev => !prev);
+                                }
+                            }}
+                        >
                             {/* Category + Priority row */}
                             <div className="flex items-center gap-2 mb-1.5">
                                 {cat && (
@@ -260,7 +291,11 @@ function CustomizeTaskCard({
                                         {deadlineStatus.status === 'overdue' && <AlertTriangle className="w-2.5 h-2.5" />}
                                         {deadlineStatus.status === 'warn' && <Clock className="w-2.5 h-2.5" />}
                                         {deadlineStatus.status === 'ok' && <Zap className="w-2.5 h-2.5" />}
-                                        <span className="text-[8px] font-black uppercase tracking-widest">{deadlineStatus.label}</span>
+                                        {activeDeadline && (
+                                            <span className="text-[8px] font-black tracking-widest">
+                                                <CountdownDisplay deadline={activeDeadline} />
+                                            </span>
+                                        )}
                                     </div>
                                 )}
                             </div>
@@ -367,12 +402,12 @@ function CustomizeTaskCard({
                                     <PopoverTrigger asChild>
                                         <button className={cn(
                                             "flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all",
-                                            task.deadline
+                                            activeDeadline
                                                 ? "text-primary border-primary/30 bg-primary/5"
                                                 : "text-muted-foreground border-border hover:border-primary/30 hover:text-primary"
                                         )}>
                                             <Clock className="w-3 h-3" />
-                                            {task.deadline ? <CountdownDisplay deadline={task.deadline} /> : 'Deadline'}
+                                            {activeDeadline ? <CountdownDisplay deadline={activeDeadline} /> : 'Deadline'}
                                         </button>
                                     </PopoverTrigger>
                                     <PopoverContent className="w-72 p-4" side="top" avoidCollisions>
@@ -399,7 +434,7 @@ function CustomizeTaskCard({
                                                         className="flex-1 h-8 text-[10px] font-black uppercase tracking-widest rounded-xl">
                                                         Set
                                                     </Button>
-                                                    {task.deadline && (
+                                                    {activeDeadline && (
                                                         <Button size="sm" variant="ghost" onClick={clearDeadline}
                                                             className="h-8 text-[10px] font-black uppercase tracking-widest rounded-xl text-red-400 hover:text-red-500 hover:bg-red-500/10">
                                                             Clear
@@ -593,11 +628,19 @@ export const CustomizeTaskView: React.FC<Props> = ({
     };
 
     const updateTask = (id: string, updates: Partial<Task>) => {
+        const normalizedUpdates = (() => {
+            if ('dueDate' in updates || 'deadline' in updates) {
+                const nextDeadline = updates.dueDate ?? updates.deadline;
+                return { ...updates, dueDate: nextDeadline, deadline: nextDeadline };
+            }
+            return updates;
+        })();
+
         if (onUpdateTask) {
-            void onUpdateTask(id, updates);
+            void onUpdateTask(id, normalizedUpdates);
             return;
         }
-        setTasks(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
+        setTasks(prev => prev.map(t => t.id === id ? { ...t, ...normalizedUpdates } : t));
     };
 
     const deleteTask = (id: string) => {
@@ -642,12 +685,18 @@ export const CustomizeTaskView: React.FC<Props> = ({
                     <span className="text-[9px] font-black text-primary/60 uppercase tracking-widest">
                         {done.length} Complete
                     </span>
-                    {tasks.some(t => t.deadline && getDeadlineStatus(t.deadline).status === 'overdue') && (
+                    {tasks.some(t => {
+                        const deadline = resolveTaskDeadline(t);
+                        return !!deadline && getDeadlineStatus(deadline).status === 'overdue';
+                    }) && (
                         <>
                             <span className="text-[9px] font-black text-muted-foreground/40 uppercase tracking-widest">·</span>
                             <span className="flex items-center gap-1 text-[9px] font-black text-red-500 uppercase tracking-widest">
                                 <AlertTriangle className="w-2.5 h-2.5" />
-                                {tasks.filter(t => t.deadline && getDeadlineStatus(t.deadline).status === 'overdue').length} Overdue
+                                {tasks.filter(t => {
+                                    const deadline = resolveTaskDeadline(t);
+                                    return !!deadline && getDeadlineStatus(deadline).status === 'overdue';
+                                }).length} Overdue
                             </span>
                         </>
                     )}

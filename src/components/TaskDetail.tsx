@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
     X,
     Trash2,
@@ -75,6 +75,24 @@ export function TaskDetail({
     const [showEnhanceDialog, setShowEnhanceDialog] = useState(false);
     const [isEnhancing, setIsEnhancing] = useState(false);
     const [showShareModal, setShowShareModal] = useState(false);
+    const [notesDraft, setNotesDraft] = useState(task?.notes || '');
+
+    useEffect(() => {
+        setNotesDraft(task?.notes || '');
+    }, [task?.id, task?.notes]);
+
+    useEffect(() => {
+        if (!task) return;
+        const nextValue = notesDraft;
+        const currentValue = task.notes || '';
+        if (nextValue === currentValue) return;
+
+        const timer = setTimeout(() => {
+            onUpdate({ notes: nextValue });
+        }, 250);
+
+        return () => clearTimeout(timer);
+    }, [notesDraft, task?.notes, onUpdate]);
 
     if (!task) return null;
 
@@ -130,34 +148,87 @@ export function TaskDetail({
         setShowEnhanceDialog(false);
 
         try {
-            // Combine all subtasks for single API call
-            const subtasksText = task.subtasks.map((st, idx) => `${idx + 1}. ${st.text}`).join('\n');
+            const sourceSubtasks = task.subtasks.map(st => st.text.trim());
+            const subtasksText = sourceSubtasks.map((text, idx) => `${idx + 1}. ${text}`).join('\n');
 
-            const prompt = `Please enhance and improve the following subtasks. Make them more clear, detailed, and actionable while keeping them concise:\n\n${subtasksText}\n\nReturn ONLY the enhanced subtasks, one per line, numbered.`;
+            const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+            let enhancedText = '';
 
-            const response = await fetch('https://api.openai.com/v1/chat/completions', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${import.meta.env.VITE_OPENAI_API_KEY}`
-                },
-                body: JSON.stringify({
-                    model: 'gpt-3.5-turbo',
-                    messages: [{ role: 'user', content: prompt }],
-                    temperature: 0.7,
-                    max_tokens: 500
-                })
-            });
+            if (GEMINI_API_KEY && !GEMINI_API_KEY.includes("YOUR_")) {
+                const prompt = `Rewrite ONLY these existing subtasks for better clarity.
 
-            if (!response.ok) throw new Error('AI enhancement failed');
+STRICT RULES:
+1) Keep the same number of subtasks: ${sourceSubtasks.length}
+2) Keep same intent and order. Do not change domain/topic.
+3) Do not add or remove any subtask.
+4) Return ONLY a valid JSON array of strings, no markdown, no explanation.
 
-            const data = await response.json();
-            const enhancedText = data.choices[0].message.content.trim();
+Task title context: "${task.text}"
+Current subtasks:
+${subtasksText}`;
 
-            // Parse enhanced subtasks
-            const enhancedLines = enhancedText.split('\n').filter(line => line.trim());
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${GEMINI_API_KEY}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        system_instruction: {
+                            parts: [{
+                                text: "You are a strict rewriting engine. You only rewrite provided lines. Never invent new tasks. Output must be only JSON array of strings."
+                            }]
+                        },
+                        contents: [
+                            {
+                                role: "user",
+                                parts: [{ text: prompt }],
+                            },
+                        ],
+                        generationConfig: {
+                            temperature: 0,
+                            topK: 1,
+                            topP: 1,
+                            maxOutputTokens: 1024,
+                        },
+                    })
+                });
+
+                if (!response.ok) throw new Error('AI enhancement failed');
+
+                const data = await response.json();
+                enhancedText = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+            } else {
+                // Safe fallback so CTA still works even when AI key is unavailable.
+                enhancedText = JSON.stringify(
+                    sourceSubtasks.map(text => `${text.charAt(0).toUpperCase()}${text.slice(1)}`)
+                );
+            }
+
+            let parsedLines: string[] = [];
+            try {
+                const jsonMatch = enhancedText.match(/\[[\s\S]*\]/);
+                if (jsonMatch) {
+                    const parsed = JSON.parse(jsonMatch[0]);
+                    if (Array.isArray(parsed)) {
+                        parsedLines = parsed.map(item => String(item).trim()).filter(Boolean);
+                    }
+                }
+            } catch {
+                parsedLines = [];
+            }
+
+            if (parsedLines.length === 0) {
+                parsedLines = enhancedText
+                    .split('\n')
+                    .map(line => line.replace(/^\d+[\).\-\s]+/, '').trim())
+                    .filter(Boolean);
+            }
+
+            if (parsedLines.length !== sourceSubtasks.length) {
+                toast.error('AI returned invalid format. Subtasks unchanged.');
+                return;
+            }
+
             const enhancedSubtasks = task.subtasks.map((st, idx) => {
-                const enhancedLine = enhancedLines[idx]?.replace(/^\d+\.\s*/, '').trim() || st.text;
+                const enhancedLine = parsedLines[idx] || st.text;
                 return { ...st, text: enhancedLine };
             });
 
@@ -595,8 +666,8 @@ export function TaskDetail({
                             <span>Notes</span>
                         </div>
                         <textarea
-                            value={task.notes || ''}
-                            onChange={(e) => onUpdate({ notes: e.target.value })}
+                            value={notesDraft}
+                            onChange={(e) => setNotesDraft(e.target.value)}
                             className="w-full bg-muted/50 rounded-2xl p-4 border border-border text-sm text-foreground focus:border-primary/30 transition-all min-h-[120px] resize-none"
                             placeholder="Insert your notes here..."
                         />

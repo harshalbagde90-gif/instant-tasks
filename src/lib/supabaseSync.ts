@@ -35,6 +35,13 @@ function mapTaskRowToTask(item: any): Task {
         subtasks: (item.subtasks as any) || [],
         notes: item.notes || '',
         createdAt: new Date(item.created_at).getTime(),
+        // ── Reminder preferences ──────────────────────────────
+        emailReminderEnabled: item.email_reminder_enabled ?? false,
+        reminderEmail: item.reminder_email || undefined,
+        whatsappReminderEnabled: item.whatsapp_reminder_enabled ?? false,
+        whatsappNumber: item.whatsapp_number || undefined,
+        whatsappVerified: item.whatsapp_verified ?? false,
+        reminderSent: item.reminder_sent ?? false,
     };
 }
 
@@ -77,7 +84,14 @@ export async function upsertTaskToSupabase(
             attachments: (task.attachments || []) as any,
             subtasks: (task.subtasks || []) as any,
             notes: task.notes || '',
-            updated_at: new Date().toISOString()
+            updated_at: new Date().toISOString(),
+            // ── Reminder preferences ──────────────────────────
+            email_reminder_enabled: task.emailReminderEnabled ?? false,
+            reminder_email: task.reminderEmail || null,
+            whatsapp_reminder_enabled: task.whatsappReminderEnabled ?? false,
+            whatsapp_number: task.whatsappNumber || null,
+            whatsapp_verified: task.whatsappVerified ?? false,
+            reminder_sent: task.reminderSent ?? false,
         };
 
         if (isUuid(task.id)) {
@@ -392,6 +406,22 @@ export async function migrateLocalDataToSupabase(
     bigDataWorkspaces?: BigDataWorkspaces
 ) {
     try {
+        const normalizeText = (value?: string | null) => (value || '').trim().toLowerCase();
+        const normalizeDate = (value?: string | null) => (value || '').trim();
+        const makeTaskFingerprint = (payload: {
+            title?: string | null;
+            mode?: string | null;
+            createdAt?: string | null;
+            dueDate?: string | null;
+        }) => {
+            return [
+                normalizeText(payload.title),
+                payload.mode || 'advanced',
+                normalizeDate(payload.createdAt),
+                normalizeDate(payload.dueDate)
+            ].join('::');
+        };
+
         const [categoriesResult, tagsResult] = await Promise.all([
             saveCategoriesToSupabase(userId, categories),
             saveTagsToSupabase(userId, tags)
@@ -407,28 +437,73 @@ export async function migrateLocalDataToSupabase(
                 .map(c => [c.name, c.id] as const)
         );
 
-        const tasksToInsert = [
+        const { data: existingRows, error: existingRowsError } = await supabase
+            .from('tasks')
+            .select('id, title, mode, created_at, due_date')
+            .eq('user_id', userId);
+        if (existingRowsError) throw existingRowsError;
+
+        const existingIdByFingerprint = new Map<string, string>();
+        for (const row of existingRows || []) {
+            if (!isUuid(row.id)) continue;
+            const fingerprint = makeTaskFingerprint({
+                title: row.title,
+                mode: row.mode,
+                createdAt: row.created_at,
+                dueDate: row.due_date
+            });
+            if (!existingIdByFingerprint.has(fingerprint)) {
+                existingIdByFingerprint.set(fingerprint, row.id);
+            }
+        }
+
+        const localTasksWithMode = [
             ...basicTasks.map(t => ({ ...t, mode: 'basic' as TaskMode })),
             ...advancedTasks.map(t => ({ ...t, mode: 'advanced' as TaskMode })),
             ...customizeTasks.map(t => ({ ...t, mode: 'customize' as TaskMode }))
-        ].map(task => ({
-            id: isUuid(task.id) ? task.id : undefined,
-            user_id: userId,
-            title: task.text,
-            description: task.description || '',
-            category_id: task.category ? categoryIdByName.get(task.category) || null : null,
-            tags: task.tags || [],
-            due_date: task.dueDate || null,
-            reminder: task.reminder || null,
-            completed: task.completed,
-            mode: task.mode,
-            priority: task.priority || null,
-            attachments: (task.attachments || []) as any,
-            subtasks: (task.subtasks || []) as any,
-            notes: task.notes || '',
-            created_at: task.createdAt ? new Date(task.createdAt).toISOString() : undefined,
-            updated_at: new Date().toISOString()
-        }));
+        ];
+
+        const seenFingerprints = new Set<string>();
+        const tasksToInsert = localTasksWithMode
+            .map(task => {
+                const createdAtIso = task.createdAt ? new Date(task.createdAt).toISOString() : '';
+                const dueDate = task.dueDate || '';
+                const fingerprint = makeTaskFingerprint({
+                    title: task.text,
+                    mode: task.mode,
+                    createdAt: createdAtIso,
+                    dueDate
+                });
+
+                if (seenFingerprints.has(fingerprint)) {
+                    return null;
+                }
+                seenFingerprints.add(fingerprint);
+
+                const existingIdForLegacyTask = !isUuid(task.id)
+                    ? existingIdByFingerprint.get(fingerprint)
+                    : undefined;
+
+                return {
+                    id: isUuid(task.id) ? task.id : existingIdForLegacyTask,
+                    user_id: userId,
+                    title: task.text,
+                    description: task.description || '',
+                    category_id: task.category ? categoryIdByName.get(task.category) || null : null,
+                    tags: task.tags || [],
+                    due_date: task.dueDate || null,
+                    reminder: task.reminder || null,
+                    completed: task.completed,
+                    mode: task.mode,
+                    priority: task.priority || null,
+                    attachments: (task.attachments || []) as any,
+                    subtasks: (task.subtasks || []) as any,
+                    notes: task.notes || '',
+                    created_at: createdAtIso || undefined,
+                    updated_at: new Date().toISOString()
+                };
+            })
+            .filter(Boolean) as any[];
 
         if (tasksToInsert.length > 0) {
             const { error } = await supabase.from('tasks').upsert(tasksToInsert as any);

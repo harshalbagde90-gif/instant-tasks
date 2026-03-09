@@ -4,7 +4,11 @@ import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 
-export const WallPrint = () => {
+interface WallPrintProps {
+    compact?: boolean;
+}
+
+export const WallPrint = ({ compact = false }: WallPrintProps) => {
     const [wallPrint, setWallPrint] = useLocalStorage<string | null>('user-wall-print', null);
     const [isDragging, setIsDragging] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -48,9 +52,9 @@ export const WallPrint = () => {
     };
 
     return (
-        <div className="flex flex-col items-end gap-2 max-w-[460px]">
+        <div className={`flex flex-col items-end ${compact ? 'gap-1 max-w-[280px]' : 'gap-2 max-w-[460px]'}`}>
             <div
-                className={`relative group w-full aspect-video rounded-[2rem] overflow-hidden border transition-all duration-500 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.7)] backdrop-blur-2xl cursor-pointer
+                className={`relative group w-full ${compact ? 'aspect-[16/10] rounded-[1.5rem]' : 'aspect-video rounded-[2rem]'} overflow-hidden border transition-all duration-500 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.7)] backdrop-blur-2xl cursor-pointer
                     ${isDragging
                         ? 'border-primary/80 shadow-[0_0_60px_rgba(250,204,21,0.3)] scale-[1.01]'
                         : wallPrint
@@ -96,17 +100,17 @@ export const WallPrint = () => {
                         </div>
 
                         {/* Bottom label */}
-                        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-all duration-500 delay-100 translate-y-2 group-hover:translate-y-0">
+                        <div className={`absolute ${compact ? 'bottom-2' : 'bottom-3'} left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-all duration-500 delay-100 translate-y-2 group-hover:translate-y-0`}>
                             <span className="text-[10px] font-black uppercase tracking-[0.2em] text-white/50">Personal Vision</span>
                         </div>
                     </>
                 ) : (
                     /* ─── Empty State — beautiful upload prompt ─── */
-                    <div className="w-full h-full flex flex-col items-center justify-center gap-4 p-6 select-none">
+                    <div className={`w-full h-full flex flex-col items-center justify-center ${compact ? 'gap-3 p-4' : 'gap-4 p-6'} select-none`}>
                         {/* Animated upload icon */}
-                        <div className={`relative w-16 h-16 rounded-2xl border-2 border-dashed flex items-center justify-center transition-all duration-300
+                        <div className={`relative ${compact ? 'w-12 h-12 rounded-xl' : 'w-16 h-16 rounded-2xl'} border-2 border-dashed flex items-center justify-center transition-all duration-300
                             ${isDragging ? 'border-primary bg-primary/10 scale-110' : 'border-white/20 group-hover:border-primary/60 group-hover:bg-primary/5'}`}>
-                            <Upload className={`w-7 h-7 transition-all duration-300
+                            <Upload className={`${compact ? 'w-5 h-5' : 'w-7 h-7'} transition-all duration-300
                                 ${isDragging ? 'text-primary scale-110' : 'text-white/30 group-hover:text-primary/70 group-hover:-translate-y-0.5'}`} />
                             {/* Corner sparks */}
                             <Zap className="absolute -top-2 -right-2 w-3.5 h-3.5 text-primary/0 group-hover:text-primary/60 transition-all duration-500 rotate-12" />
@@ -114,12 +118,14 @@ export const WallPrint = () => {
 
                         {/* Headline */}
                         <div className="flex flex-col items-center gap-1 text-center">
-                            <span className="text-[13px] font-black uppercase tracking-widest text-white/70 group-hover:text-white/90 transition-colors duration-300">
+                            <span className={`${compact ? 'text-[11px]' : 'text-[13px]'} font-black uppercase tracking-widest text-white/70 group-hover:text-white/90 transition-colors duration-300`}>
                                 Upload Your Motivation
                             </span>
-                            <span className="text-[10px] font-medium text-white/30 group-hover:text-white/50 transition-colors duration-300 max-w-[260px] leading-relaxed">
-                                Upload an image that motivates you — your goal, your dream, your vision. Drop it here or click to browse.
-                            </span>
+                            {!compact && (
+                                <span className="text-[10px] font-medium text-white/30 group-hover:text-white/50 transition-colors duration-300 max-w-[260px] leading-relaxed">
+                                    Upload an image that motivates you — your goal, your dream, your vision. Drop it here or click to browse.
+                                </span>
+                            )}
                         </div>
 
                         {/* CTA pill */}
@@ -141,7 +147,7 @@ export const WallPrint = () => {
                 )}
 
                 {/* Frame glow border */}
-                <div className="absolute inset-0 pointer-events-none rounded-[2rem] border border-white/10 group-hover:border-primary/20 transition-colors duration-500" />
+                <div className={`absolute inset-0 pointer-events-none ${compact ? 'rounded-[1.5rem]' : 'rounded-[2rem]'} border border-white/10 group-hover:border-primary/20 transition-colors duration-500`} />
 
                 <input
                     type="file"
@@ -152,9 +158,11 @@ export const WallPrint = () => {
                 />
             </div>
 
-            <p className="text-[13px] text-muted-foreground font-medium italic pr-4 text-right leading-relaxed tracking-tight">
-                Upload images that motivate you to stay focused on your missions.
-            </p>
+            {!compact && (
+                <p className="text-[13px] text-muted-foreground font-medium italic pr-4 text-right leading-relaxed tracking-tight">
+                    Upload images that motivate you to stay focused on your missions.
+                </p>
+            )}
         </div>
     );
 };

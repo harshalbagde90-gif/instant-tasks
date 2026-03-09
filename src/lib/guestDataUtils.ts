@@ -100,6 +100,10 @@ export function getHoursUntilExpiration(): number {
  * Check if there is any guest data
  */
 export function hasGuestData(): boolean {
+    if (localStorage.getItem(CLOUD_ONLY_MODE_KEY) === 'true') {
+        return false;
+    }
+
     const parseArray = (value: string | null) => {
         if (!value) return [];
         try {
@@ -124,12 +128,11 @@ export function hasGuestData(): boolean {
     const advancedTasks = parseArray(localStorage.getItem('taskflow-tasks-advanced'));
     const customizeTasks = parseArray(localStorage.getItem('taskflow-tasks-customize'));
     const bigData = parseObject(localStorage.getItem('big-data-workspaces')) as Record<string, unknown[]>;
-    const guestTimestamp = localStorage.getItem(GUEST_DATA_TIMESTAMP_KEY);
 
     const hasTasks = basicTasks.length > 0 || advancedTasks.length > 0 || customizeTasks.length > 0;
     const hasBigData = Object.values(bigData).some(value => Array.isArray(value) && value.length > 0);
 
-    return hasTasks || hasBigData || !!guestTimestamp;
+    return hasTasks || hasBigData;
 }
 
 /**

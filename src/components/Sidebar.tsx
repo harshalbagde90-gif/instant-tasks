@@ -194,8 +194,8 @@ export function Sidebar({
     };
 
     // Calculate Grouped Tasks for Sidebar Display
-    const oneDayTasks = tasks.filter(t => !t.dueDate || isToday(parseISO(t.dueDate)));
-    const dayToDayTasks = tasks.filter(t => t.dueDate && !isToday(parseISO(t.dueDate)));
+    const oneDayTasks = tasks.filter(t => !t.dueDate);
+    const dayToDayTasks = tasks.filter(t => !!t.dueDate);
 
     // Calculate Counts: Only count sheets that have content
     const advancedTasksCount = tasks.length;

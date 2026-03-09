@@ -28,6 +28,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({ task, mode, ownerId, onC
                 id: task.id,
                 text: task.text,
                 description: task.description,
+                notes: task.notes,
                 deadline: task.deadline,
                 priority: task.priority,
                 category: task.category,

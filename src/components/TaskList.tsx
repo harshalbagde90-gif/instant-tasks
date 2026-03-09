@@ -16,12 +16,16 @@ interface TaskListProps {
   tasks: Task[];
   onToggle: (id: string) => void;
   onUpdate: (id: string, text: string, previousText?: string) => void;
+  onUpdateTask?: (id: string, updates: Partial<Task>) => void;
   onDelete: (id: string) => void;
   onAIAction: (id: string, action: AIAction) => Promise<string | string[]>;
   onAddSubtasks: (parentId: string, subtasks: string[]) => void;
   onUndo: (id: string) => void;
   selectedLanguage: string;
   onLanguageChange: (lang: string) => void;
+  userEmail?: string;
+  user?: import('@supabase/supabase-js').User | null;
+  onAuthClick?: () => void;
 }
 
 const SUPPORTED_LANGUAGES = [
@@ -31,7 +35,7 @@ const SUPPORTED_LANGUAGES = [
   { name: 'Russian', native: 'Русский' },
 ];
 
-export function TaskList({ tasks, onToggle, onUpdate, onDelete, onAIAction, onAddSubtasks, onUndo, selectedLanguage, onLanguageChange }: TaskListProps) {
+export function TaskList({ tasks, onToggle, onUpdate, onUpdateTask, onDelete, onAIAction, onAddSubtasks, onUndo, selectedLanguage, onLanguageChange, userEmail, user, onAuthClick }: TaskListProps) {
   const activeTasks = tasks.filter(t => !t.completed);
   const completedTasks = tasks.filter(t => t.completed);
 
@@ -118,10 +122,14 @@ export function TaskList({ tasks, onToggle, onUpdate, onDelete, onAIAction, onAd
                 index={tasks.indexOf(task) + 1}
                 onToggle={onToggle}
                 onUpdate={onUpdate}
+                onUpdateTask={onUpdateTask}
                 onDelete={onDelete}
                 onAIAction={onAIAction}
                 onAddSubtasks={onAddSubtasks}
                 onUndo={onUndo}
+                user={user}
+                userEmail={userEmail}
+                onAuthClick={onAuthClick}
               />
             ))}
           </div>
@@ -148,10 +156,14 @@ export function TaskList({ tasks, onToggle, onUpdate, onDelete, onAIAction, onAd
                 index={tasks.indexOf(task) + 1}
                 onToggle={onToggle}
                 onUpdate={onUpdate}
+                onUpdateTask={onUpdateTask}
                 onDelete={onDelete}
                 onAIAction={onAIAction}
                 onAddSubtasks={onAddSubtasks}
                 onUndo={onUndo}
+                user={user}
+                userEmail={userEmail}
+                onAuthClick={onAuthClick}
               />
             ))}
           </div>

@@ -137,6 +137,7 @@ const Index = () => {
     const [heroSubtitle, setHeroSubtitle] = useLocalStorage<string>('hero-subtitle', 'Time to make your own luck');
     const [isEditingSubtitle, setIsEditingSubtitle] = useState(false);
     const [user, setUser] = useState<User | null>(null);
+    const [isAuthBootstrapped, setIsAuthBootstrapped] = useState(false);
     const [profile, setProfile] = useState<any>(null);
     const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
     const [pendingMode, setPendingMode] = useState<'advanced' | 'big-data' | 'customize' | null>(null);
@@ -188,13 +189,6 @@ const Index = () => {
             toast.success(`${pendingMode === 'advanced' ? 'Advanced' : 'Big Data'} Mode Activated!`);
         }
     }, [user, pendingMode]);
-
-    // Non-auth users can only stay in basic mode
-    useEffect(() => {
-        if (!user && appMode !== 'basic') {
-            setAppMode('basic');
-        }
-    }, [user, appMode, setAppMode]);
 
     const handleTaskJump = (taskId: string) => {
         if (!user) {
@@ -306,10 +300,12 @@ const Index = () => {
     useEffect(() => {
         supabase.auth.getSession().then(({ data: { session } }) => {
             setUser(session?.user ?? null);
+            setIsAuthBootstrapped(true);
         });
 
         const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
             setUser(session?.user ?? null);
+            setIsAuthBootstrapped(true);
 
             if (event === 'SIGNED_OUT') {
                 guestDataUtils.setCloudOnlyModeActive(false);
@@ -344,6 +340,7 @@ const Index = () => {
     useEffect(() => {
         // If no user, reset guards (user logged out)
         if (!user) {
+            if (!isAuthBootstrapped) return;
             if (localStorage.getItem(guestDataUtils.CLOUD_ONLY_MODE_KEY) === 'true') {
                 guestDataUtils.setCloudOnlyModeActive(false);
                 guestDataUtils.clearCloudCachedData();
@@ -411,7 +408,6 @@ const Index = () => {
             lastTagsSynced.current = cloudTags.length > 0 ? JSON.stringify(resolvedTags) : '';
             lastBigDataSynced.current = JSON.stringify(resolvedBigData);
             guestDataUtils.setCloudOnlyModeActive(true);
-            guestDataUtils.clearCloudCachedData();
             setCloudBootstrapComplete(true);
         };
 
@@ -462,7 +458,7 @@ const Index = () => {
         };
 
         void initializeCloudSync();
-    }, [user]);
+    }, [user, isAuthBootstrapped]);
 
 
 
@@ -653,7 +649,8 @@ const Index = () => {
 
     const selectedTask = tasks.find(t => t.id === selectedTaskId) || null;
 
-    const isTodayTask = (t: Task) => !t.dueDate || isToday(parseISO(t.dueDate));
+    // One Day bucket: only unscheduled tasks (no due date).
+    const isTodayTask = (t: Task) => !t.dueDate;
     const isTomorrowTask = (t: Task) => t.dueDate && isTomorrow(parseISO(t.dueDate));
     const isUpcomingTask = (t: Task) => t.dueDate && isAfter(parseISO(t.dueDate), addDays(startOfToday(), 1));
     const isTargetDateTask = (t: Task) => t.dueDate && isSameDay(parseISO(t.dueDate), selectedDate);
@@ -1550,11 +1547,11 @@ const Index = () => {
 
                         <div className={cn(
                             "hidden md:block relative md:absolute right-0 z-20 transition-all duration-700 ease-in-out order-first md:order-last",
-                            appMode === 'big-data' ? "top-0 md:-top-8" : "top-0 md:top-6",
-                            "mt-0 md:mt-0 mb-6 md:mb-0 mx-auto md:mx-0 max-w-sm md:max-w-none",
+                            appMode === 'big-data' ? "top-0 md:-top-8" : appMode === 'customize' ? "top-0 md:top-0 md:right-8" : "top-0 md:top-6",
+                            appMode === 'customize' ? "mt-0 mb-4 mx-auto md:mx-0 max-w-[280px]" : "mt-0 md:mt-0 mb-6 md:mb-0 mx-auto md:mx-0 max-w-sm md:max-w-none",
                             (isSidebarOpen || selectedTaskId) ? "md:opacity-0 md:translate-x-10 md:pointer-events-none md:blur-xl md:scale-90" : "opacity-100 translate-x-0 scale-100"
                         )}>
-                            <WallPrint />
+                            <WallPrint compact={appMode === 'customize'} />
                         </div>
                     </div>
 
@@ -1718,7 +1715,7 @@ const Index = () => {
                                 </div>
                                 <div className="space-y-3">
                                     {activeTasks.map((task, index) => (
-                                        <TaskItemView key={task.id} task={task} index={index + 1} isSelected={selectedTaskId === task.id} appMode={appMode} categories={categories} availableTags={availableTags} onClick={() => setSelectedTaskId(task.id === selectedTaskId ? null : task.id)} onToggle={() => toggleTask(task.id)} onAIAction={handleAIAction} onUndo={handleUndoTask} onUpdate={updateTask} user={user} onAuthClick={() => setIsAuthModalOpen(true)} />
+                                        <TaskItemView key={task.id} task={task} index={index + 1} isSelected={selectedTaskId === task.id} appMode={appMode} categories={categories} availableTags={availableTags} onClick={() => setSelectedTaskId(task.id === selectedTaskId ? null : task.id)} onToggle={() => toggleTask(task.id)} onAIAction={handleAIAction} onUndo={handleUndoTask} onUpdate={updateTask} user={user} userEmail={user?.email} onAuthClick={() => setIsAuthModalOpen(true)} />
                                     ))}
                                     {activeTasks.length === 0 && (
                                         <div className="py-20 flex flex-col items-center justify-center opacity-20"><ListTodo className="w-12 h-12 mb-4" /><span className="text-xs font-black uppercase tracking-widest">No Active Missions</span></div>
@@ -1749,7 +1746,7 @@ const Index = () => {
                                 <h2 className="text-[10px] font-black text-zinc-700 uppercase tracking-widest px-1">Completed Objectives</h2>
                                 <div className="space-y-2 opacity-50 grayscale hover:opacity-100 transition-all">
                                     {completedTasks.map((task, index) => (
-                                        <TaskItemView key={task.id} task={task} index={index + 1} isSelected={selectedTaskId === task.id} appMode={appMode} categories={categories} availableTags={availableTags} onClick={() => setSelectedTaskId(task.id === selectedTaskId ? null : task.id)} onToggle={() => toggleTask(task.id)} onAIAction={handleAIAction} onUndo={handleUndoTask} onUpdate={updateTask} user={user} onAuthClick={() => setIsAuthModalOpen(true)} />
+                                        <TaskItemView key={task.id} task={task} index={index + 1} isSelected={selectedTaskId === task.id} appMode={appMode} categories={categories} availableTags={availableTags} onClick={() => setSelectedTaskId(task.id === selectedTaskId ? null : task.id)} onToggle={() => toggleTask(task.id)} onAIAction={handleAIAction} onUndo={handleUndoTask} onUpdate={updateTask} user={user} userEmail={user?.email} onAuthClick={() => setIsAuthModalOpen(true)} />
                                     ))}
                                 </div>
                             </section>
@@ -1948,22 +1945,13 @@ const CategoryIcon = ({ name, className, style }: { name: string, className?: st
 };
 
 const TaskItemView = ({
-    task,
-    isSelected,
-    onClick,
-    onToggle,
-    onAIAction,
-    onUndo,
-    index,
-    appMode,
-    categories,
-    availableTags,
-    user,
-    onAuthClick,
-    onUpdate
+    task, isSelected, onClick, onToggle, onAIAction, onUndo, index,
+    appMode, categories, availableTags, user, userEmail, onAuthClick, onUpdate
 }: any) => {
     const [isFixing, setIsFixing] = useState(false);
+    const [isReminderOpen, setIsReminderOpen] = useState(false);
     return (
+        <>
         <div
             onClick={onClick}
             className={cn(
@@ -1972,10 +1960,7 @@ const TaskItemView = ({
             )}
         >
             <div className="flex items-center gap-6">
-                <button
-                    onClick={(e) => { e.stopPropagation(); onToggle(); }}
-                    className="relative"
-                >
+                <button onClick={(e) => { e.stopPropagation(); onToggle(); }} className="relative">
                     <div className={cn(
                         "w-7 h-7 rounded-full border-2 flex items-center justify-center transition-all",
                         task.completed ? "bg-primary border-primary" : "border-border hover:border-primary"
@@ -2003,11 +1988,7 @@ const TaskItemView = ({
                                 const tagObj = availableTags?.find((t: any) => t.name === tagName);
                                 const tagColor = tagObj?.color || '#6366f1';
                                 return (
-                                    <div
-                                        key={tagName}
-                                        className="flex items-center gap-1 px-1.5 py-0.5 rounded-full border"
-                                        style={{ backgroundColor: `${tagColor}12`, borderColor: `${tagColor}30`, color: tagColor }}
-                                    >
+                                    <div key={tagName} className="flex items-center gap-1 px-1.5 py-0.5 rounded-full border" style={{ backgroundColor: `${tagColor}12`, borderColor: `${tagColor}30`, color: tagColor }}>
                                         <div className="w-1 h-1 rounded-full shrink-0" style={{ backgroundColor: tagColor }} />
                                         <span className="text-[8px] font-black uppercase tracking-tight">{tagName}</span>
                                     </div>
@@ -2021,21 +2002,24 @@ const TaskItemView = ({
                 </div>
             </div>
             <div className="flex items-center gap-2">
+                <button
+                    onClick={(e) => { e.stopPropagation(); if (!user) { onAuthClick?.(); return; } setIsReminderOpen(true); }}
+                    className={cn(
+                        "relative w-8 h-8 rounded-full flex items-center justify-center transition-all opacity-0 group-hover:opacity-100",
+                        task.emailReminderEnabled ? "bg-yellow-400/10 text-yellow-400 border border-yellow-400/30 !opacity-100" : "bg-white/5 text-gray-500 border border-white/10 hover:text-yellow-400"
+                    )}
+                >
+                    <Bell className="w-3.5 h-3.5" />
+                    {task.emailReminderEnabled && <span className="absolute w-1.5 h-1.5 bg-yellow-400 rounded-full top-1 right-1 animate-pulse" />}
+                </button>
                 {!task.completed && (
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        className="w-10 h-10 rounded-full text-primary"
+                    <Button variant="ghost" size="icon" className="w-10 h-10 rounded-full text-primary"
                         onClick={async (e) => {
                             e.stopPropagation();
                             setIsFixing(true);
                             const result = await onAIAction(task.id, 'improve');
                             setIsFixing(false);
-                            if (result === "__NO_CHANGE__") {
-                                toast.info("ALREADY OPTIMIZED");
-                            } else {
-                                toast.success("Refined Successfully");
-                            }
+                            if (result === "__NO_CHANGE__") { toast.info("ALREADY OPTIMIZED"); } else { toast.success("Refined Successfully"); }
                         }}
                         disabled={isFixing}
                     >
@@ -2044,8 +2028,9 @@ const TaskItemView = ({
                 )}
             </div>
         </div>
+        <ReminderDialog isOpen={isReminderOpen} onClose={() => setIsReminderOpen(false)} task={task} userEmail={userEmail} onUpdate={onUpdate} />
+        </>
     );
 };
 
 export default Index;
-
