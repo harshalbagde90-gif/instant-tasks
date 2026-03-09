@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect, useState } from 'react';
 import {
     X,
     Trash2,
@@ -15,8 +15,6 @@ import {
     Sparkles,
     Check,
     RotateCcw,
-    ChevronDown,
-    Clock,
     Settings,
     Loader2,
     Share2
@@ -25,9 +23,9 @@ import { Task } from '@/types/task';
 import { Switch } from '@/components/ui/switch';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Dialog, DialogContent, DialogTrigger, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { format, addDays, nextMonday, startOfToday } from 'date-fns';
+import { format, addDays, startOfToday } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -51,6 +49,7 @@ const CategoryIcon = ({ name, className, style }: { name: string, className?: st
     const IconComponent = (LucideIcons as any)[name] || LucideIcons.HelpCircle;
     return <IconComponent className={className} style={style} />;
 };
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 interface TaskDetailProps {
     task: Task | null;
@@ -76,6 +75,7 @@ export function TaskDetail({
     const [isEnhancing, setIsEnhancing] = useState(false);
     const [showShareModal, setShowShareModal] = useState(false);
     const [notesDraft, setNotesDraft] = useState(task?.notes || '');
+    const [calendarMonth, setCalendarMonth] = useState<Date>(new Date());
 
     useEffect(() => {
         setNotesDraft(task?.notes || '');
@@ -94,7 +94,47 @@ export function TaskDetail({
         return () => clearTimeout(timer);
     }, [notesDraft, task?.notes, onUpdate]);
 
+    useEffect(() => {
+        const parsed = task?.reminder ? new Date(task.reminder) : new Date();
+        setCalendarMonth(Number.isNaN(parsed.getTime()) ? new Date() : parsed);
+    }, [task?.id, task?.reminder]);
+
     if (!task) return null;
+
+    const parseReminderDate = (value?: string) => {
+        if (!value) return null;
+        const date = new Date(value);
+        return Number.isNaN(date.getTime()) ? null : date;
+    };
+
+    const to12hParts = (date: Date) => {
+        const h24 = date.getHours();
+        const ampm: 'AM' | 'PM' = h24 >= 12 ? 'PM' : 'AM';
+        const hour = h24 % 12 === 0 ? 12 : h24 % 12;
+        return {
+            hour: String(hour).padStart(2, '0'),
+            minute: String(date.getMinutes()).padStart(2, '0'),
+            ampm,
+        };
+    };
+
+    const buildReminderIso = (dateValue: string, hour: string, minute: string, ampm: 'AM' | 'PM') => {
+        const local = new Date(`${dateValue}T12:00:00`);
+        if (Number.isNaN(local.getTime())) return undefined;
+        let h = Number.parseInt(hour, 10);
+        if (ampm === 'PM' && h !== 12) h += 12;
+        if (ampm === 'AM' && h === 12) h = 0;
+        local.setHours(h, Number.parseInt(minute, 10), 0, 0);
+        return local.toISOString();
+    };
+
+    const parsedReminder = parseReminderDate(task.reminder);
+    const reminderDate = parsedReminder ?? new Date();
+    const reminderParts = to12hParts(reminderDate);
+    const reminderDateInput = format(reminderDate, 'yyyy-MM-dd');
+    const reminderLabel = parsedReminder
+        ? format(parsedReminder, 'MMM d, hh:mm a')
+        : (task.reminder || 'Add Reminder');
 
     const handleAddSubtask = () => {
         if (!subtaskInput.trim()) return;
@@ -367,112 +407,186 @@ ${subtasksText}`;
                                             task.reminder && "bg-primary/10 border-primary/30"
                                         )}>
                                             <Bell className={cn("w-4 h-4", task.reminder ? "text-primary" : "text-muted-foreground")} />
-                                            <span className="text-xs font-semibold text-muted-foreground">{task.reminder || 'Add Reminder'}</span>
+                                            <span className="text-xs font-semibold text-muted-foreground">{reminderLabel}</span>
                                         </Button>
                                     </DialogTrigger>
-                                    <DialogContent className="max-w-[420px] p-0 bg-card/98 backdrop-blur-2xl border-2 border-border rounded-[2.5rem] shadow-[0_0_80px_rgba(0,0,0,0.1)] dark:shadow-[0_0_80px_rgba(0,0,0,0.9)] overflow-hidden scale-95 sm:scale-100 focus:outline-none">
-                                        {/* ... reminder dialog content ... */}
-                                        {/* (Keeping code same as before but wrapped in condition) */}
-                                        <div className="p-5 flex items-center justify-between border-b border-border bg-foreground/5 px-8">
-                                            <span className="text-[10px] font-black uppercase tracking-[0.4em] text-muted-foreground">Mission Reminder</span>
-                                            <DialogTrigger asChild>
-                                                <Button variant="ghost" size="icon" className="h-6 w-6 rounded-full hover:bg-foreground/10 transition-colors">
-                                                    <X className="w-3.5 h-3.5 text-muted-foreground" />
-                                                </Button>
-                                            </DialogTrigger>
+                                    <DialogContent className="fixed top-[40%] sm:top-[36%] w-[92vw] max-w-[420px] p-0 bg-card/98 backdrop-blur-2xl border-2 border-border rounded-[2rem] shadow-[0_0_80px_rgba(0,0,0,0.1)] dark:shadow-[0_0_80px_rgba(0,0,0,0.9)] overflow-hidden focus:outline-none data-[state=open]:animate-in data-[state=open]:zoom-in-95 data-[state=open]:duration-100 data-[state=closed]:duration-75">
+                                        <div className="pointer-events-none absolute inset-y-0 left-0 w-px bg-gradient-to-b from-transparent via-yellow-500/70 to-transparent" />
+                                        <div className="pointer-events-none absolute inset-y-0 right-0 w-px bg-gradient-to-b from-transparent via-yellow-500/70 to-transparent" />
+                                        <div className="p-4 flex items-center border-b border-border bg-foreground/5 px-5">
+                                            <span className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground">Mission Reminder</span>
                                         </div>
 
-                                        <div className="p-8 pb-4 space-y-8">
-                                            <div className="grid grid-cols-2 gap-5">
-                                                <div className="space-y-2.5">
-                                                    <label className="text-[9px] font-black text-primary uppercase tracking-[0.3em] pl-1 opacity-80">Target Date</label>
-                                                    <div className="bg-muted border-2 border-border rounded-2xl px-5 py-4 text-[11px] font-black text-foreground shadow-inner flex items-center gap-3 border-b-primary/20">
-                                                        <CalendarIcon className="w-4 h-4 text-primary" />
-                                                        {task.reminder ? task.reminder.split(',')[0] : format(new Date(), 'MMM dd, yyyy')}
-                                                    </div>
-                                                </div>
-                                                <div className="space-y-2.5">
-                                                    <label className="text-[9px] font-black text-primary uppercase tracking-[0.3em] pl-1 opacity-80">Precise Time</label>
-                                                    <div className="relative group/time">
-                                                        <select
-                                                            className="w-full bg-muted/50 border-2 border-border/50 rounded-2xl px-5 py-4 text-[11px] font-black text-foreground focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all shadow-inner appearance-none cursor-pointer group-hover/time:border-primary/30"
-                                                            value={task.reminder?.includes(',') ? task.reminder.split(',')[1].trim() : '09:00 AM'}
-                                                            onChange={(e) => {
-                                                                const dateStr = task.reminder?.split(',')[0] || format(new Date(), 'MMM dd, yyyy');
-                                                                onUpdate({ reminder: `${dateStr}, ${e.target.value}` });
-                                                            }}
+                                        <div className="p-4 pb-3 space-y-3.5">
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div className="space-y-1.5">
+                                                    <label className="text-[9px] font-black text-primary uppercase tracking-[0.25em] pl-1 opacity-80">Target Date</label>
+                                                    <Popover>
+                                                        <PopoverTrigger asChild>
+                                                            <Button
+                                                                type="button"
+                                                                variant="outline"
+                                                                className="h-10 w-full justify-between bg-muted/50 border-border/60 rounded-xl text-sm font-bold text-foreground hover:bg-muted/60"
+                                                            >
+                                                                <span>{format(reminderDate, 'dd-MM-yyyy')}</span>
+                                                                <CalendarIcon className="w-4 h-4 text-primary" />
+                                                            </Button>
+                                                        </PopoverTrigger>
+                                                        <PopoverContent
+                                                            align="start"
+                                                            side="left"
+                                                            sideOffset={8}
+                                                            className="w-auto p-2 bg-card border-border rounded-xl"
                                                         >
-                                                            {Array.from({ length: 24 }).map((_, i) => {
-                                                                const hour = i % 12 || 12;
-                                                                const amPm = i < 12 ? 'AM' : 'PM';
-                                                                const timeStr = `${hour.toString().padStart(2, '0')}:00 ${amPm}`;
-                                                                return <option key={timeStr} value={timeStr} className="bg-card text-foreground font-bold">{timeStr}</option>;
-                                                            })}
+                                                            <div className="mb-2 grid grid-cols-2 gap-2">
+                                                                <select
+                                                                    value={calendarMonth.getMonth()}
+                                                                    onChange={(e) => {
+                                                                        const next = new Date(calendarMonth);
+                                                                        next.setMonth(Number(e.target.value));
+                                                                        setCalendarMonth(next);
+                                                                    }}
+                                                                    className="h-8 bg-black/80 border border-yellow-500/30 rounded-md px-2 text-[11px] font-bold text-yellow-400 focus:outline-none focus:border-yellow-400"
+                                                                >
+                                                                    {MONTH_NAMES.map((name, idx) => (
+                                                                        <option key={name} value={idx} className="bg-black text-yellow-400">{name}</option>
+                                                                    ))}
+                                                                </select>
+                                                                <select
+                                                                    value={calendarMonth.getFullYear()}
+                                                                    onChange={(e) => {
+                                                                        const next = new Date(calendarMonth);
+                                                                        next.setFullYear(Number(e.target.value));
+                                                                        setCalendarMonth(next);
+                                                                    }}
+                                                                    className="h-8 bg-black/80 border border-yellow-500/30 rounded-md px-2 text-[11px] font-bold text-yellow-400 focus:outline-none focus:border-yellow-400"
+                                                                >
+                                                                    {Array.from({ length: 16 }, (_, i) => new Date().getFullYear() - 5 + i).map((year) => (
+                                                                        <option key={year} value={year} className="bg-black text-yellow-400">{year}</option>
+                                                                    ))}
+                                                                </select>
+                                                            </div>
+                                                            <Calendar
+                                                                mode="single"
+                                                                selected={reminderDate}
+                                                                month={calendarMonth}
+                                                                onMonthChange={setCalendarMonth}
+                                                                onSelect={(date) => {
+                                                                    if (!date) return;
+                                                                    setCalendarMonth(date);
+                                                                    const nextIso = buildReminderIso(
+                                                                        format(date, 'yyyy-MM-dd'),
+                                                                        reminderParts.hour,
+                                                                        reminderParts.minute,
+                                                                        reminderParts.ampm
+                                                                    );
+                                                                    if (nextIso) onUpdate({ reminder: nextIso, reminderSent: false });
+                                                                }}
+                                                                disabled={{ before: startOfToday() }}
+                                                                initialFocus
+                                                                classNames={{
+                                                                    cell: "h-9 w-9 text-center text-sm p-0 relative focus-within:relative focus-within:z-20",
+                                                                    day: "h-9 w-9 p-0 font-semibold rounded-full text-amber-100 hover:bg-yellow-500/20 hover:text-yellow-300",
+                                                                    day_selected: "bg-yellow-500 text-black rounded-full hover:bg-yellow-500 focus:bg-yellow-500",
+                                                                    day_today: "text-yellow-400 font-bold",
+                                                                }}
+                                                            />
+                                                        </PopoverContent>
+                                                    </Popover>
+                                                </div>
+
+                                                <div className="space-y-1.5">
+                                                    <label className="text-[9px] font-black text-primary uppercase tracking-[0.25em] pl-1 opacity-80">Precise Time</label>
+                                                    <div className="grid grid-cols-[1fr_1fr_auto] gap-1.5">
+                                                        <select
+                                                            value={reminderParts.hour}
+                                                            onChange={(e) => {
+                                                                const nextIso = buildReminderIso(
+                                                                    reminderDateInput,
+                                                                    e.target.value,
+                                                                    reminderParts.minute,
+                                                                    reminderParts.ampm
+                                                                );
+                                                                if (nextIso) onUpdate({ reminder: nextIso, reminderSent: false });
+                                                            }}
+                                                            className="h-10 bg-black/80 border border-yellow-500/30 rounded-xl px-2 text-center text-sm font-black text-yellow-400 focus:outline-none focus:border-yellow-400"
+                                                        >
+                                                            {Array.from({ length: 12 }, (_, i) => String(i === 0 ? 12 : i).padStart(2, '0')).map((h) => (
+                                                                <option key={h} value={h} className="bg-black text-yellow-400">{h}</option>
+                                                            ))}
                                                         </select>
-                                                        <div className="absolute right-5 top-1/2 -translate-y-1/2 flex items-center gap-2 pointer-events-none">
-                                                            <Clock className="w-3.5 h-3.5 text-primary/40 group-hover/time:text-primary transition-colors" />
-                                                            <ChevronDown className="w-4 h-4 text-muted-foreground/40 group-hover/time:text-primary/60 transition-colors" />
+
+                                                        <select
+                                                            value={reminderParts.minute}
+                                                            onChange={(e) => {
+                                                                const nextIso = buildReminderIso(
+                                                                    reminderDateInput,
+                                                                    reminderParts.hour,
+                                                                    e.target.value,
+                                                                    reminderParts.ampm
+                                                                );
+                                                                if (nextIso) onUpdate({ reminder: nextIso, reminderSent: false });
+                                                            }}
+                                                            className="h-10 bg-black/80 border border-yellow-500/30 rounded-xl px-2 text-center text-sm font-black text-yellow-400 focus:outline-none focus:border-yellow-400"
+                                                        >
+                                                            {Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0')).map((m) => (
+                                                                <option key={m} value={m} className="bg-black text-yellow-400">{m}</option>
+                                                            ))}
+                                                        </select>
+
+                                                        <div className="flex flex-col gap-1">
+                                                            {(['AM', 'PM'] as const).map((slot) => (
+                                                                <button
+                                                                    key={slot}
+                                                                    onClick={() => {
+                                                                        const nextIso = buildReminderIso(
+                                                                            reminderDateInput,
+                                                                            reminderParts.hour,
+                                                                            reminderParts.minute,
+                                                                            slot
+                                                                        );
+                                                                        if (nextIso) onUpdate({ reminder: nextIso, reminderSent: false });
+                                                                    }}
+                                                                    className={cn(
+                                                                        "h-[19px] min-w-[44px] px-2 rounded-md text-[10px] font-black border transition-all",
+                                                                        reminderParts.ampm === slot
+                                                                            ? "bg-primary text-primary-foreground border-primary"
+                                                                            : "bg-muted/50 text-muted-foreground border-border/60 hover:border-primary/40"
+                                                                    )}
+                                                                >
+                                                                    {slot}
+                                                                </button>
+                                                            ))}
                                                         </div>
                                                     </div>
                                                 </div>
                                             </div>
 
-                                            <div className="flex gap-8 min-h-[220px]">
-                                                <div className="flex-1 flex flex-col items-center">
-                                                    <Calendar
-                                                        mode="single"
-                                                        selected={task.reminder && task.reminder.includes(',') ? new Date(task.reminder.split(',')[0]) : new Date()}
-                                                        onSelect={(date) => {
-                                                            if (date) {
-                                                                const time = task.reminder?.includes(',') ? task.reminder.split(',')[1] : ' 09:00 AM';
-                                                                onUpdate({ reminder: `${format(date, 'MMM dd, yyyy')},${time}` });
-                                                            }
+                                            <div className="flex gap-2">
+                                                {[
+                                                    { label: 'Today', date: startOfToday(), time: '06:00 PM' },
+                                                    { label: 'Tomorrow', date: addDays(startOfToday(), 1), time: '09:00 AM' },
+                                                    { label: 'Next Week', date: addDays(startOfToday(), 7), time: '09:00 AM' },
+                                                ].map((opt) => (
+                                                    <button
+                                                        key={opt.label}
+                                                        onClick={() => {
+                                                            const [hhmm, meridian] = opt.time.split(' ');
+                                                            const [hh, mm] = hhmm.split(':');
+                                                            const quickDate = format(opt.date, 'yyyy-MM-dd');
+                                                            const nextIso = buildReminderIso(
+                                                                quickDate,
+                                                                hh,
+                                                                mm,
+                                                                meridian as 'AM' | 'PM'
+                                                            );
+                                                            if (nextIso) onUpdate({ reminder: nextIso, reminderSent: false });
                                                         }}
-                                                        className="p-0 border-none bg-transparent"
-                                                        classNames={{
-                                                            months: "flex flex-col space-y-4",
-                                                            month: "space-y-6",
-                                                            caption: "flex justify-center pt-1 relative items-center mb-4",
-                                                            caption_label: "text-[11px] font-black uppercase tracking-[0.4em] text-primary/80",
-                                                            nav: "space-x-1 flex items-center",
-                                                            nav_button: "h-8 w-8 bg-transparent p-0 opacity-50 hover:opacity-100 hover:bg-primary/10 rounded-full transition-all duration-300",
-                                                            nav_button_previous: "absolute left-1",
-                                                            nav_button_next: "absolute right-1",
-                                                            table: "w-full border-collapse space-y-1",
-                                                            head_row: "flex",
-                                                            head_cell: "text-muted-foreground/40 rounded-md w-9 font-black text-[9px] uppercase tracking-widest",
-                                                            row: "flex w-full mt-2 gap-1",
-                                                            cell: "relative p-0 text-center text-sm focus-within:relative focus-within:z-20",
-                                                            day: cn(
-                                                                "h-9 w-9 p-0 font-black transition-all duration-300 rounded-xl hover:bg-primary/20 hover:text-primary hover:scale-110 active:scale-95 text-[10px]",
-                                                                "aria-selected:opacity-100"
-                                                            ),
-                                                            day_selected: "bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground rounded-xl font-black shadow-[0_0_25px_rgba(var(--primary),0.5)] border-none scale-110",
-                                                            day_today: "bg-muted text-primary border border-primary/20",
-                                                            day_outside: "text-muted-foreground/20 opacity-50",
-                                                            day_disabled: "text-muted-foreground/20 opacity-50",
-                                                            day_hidden: "invisible",
-                                                        }}
-                                                    />
-                                                </div>
-
-                                                <div className="w-24 flex flex-col gap-1.5 pt-8">
-                                                    {[
-                                                        { label: 'Today', date: startOfToday(), time: '06:00 PM' },
-                                                        { label: 'Tomorrow', date: addDays(startOfToday(), 1), time: '09:00 AM' },
-                                                        { label: 'Next Week', date: nextMonday(startOfToday()), time: '09:00 AM' },
-                                                    ].map((opt) => (
-                                                        <button
-                                                            key={opt.label}
-                                                            onClick={() => onUpdate({
-                                                                reminder: `${format(opt.date, 'MMM dd, yyyy')}, ${opt.time}`
-                                                            })}
-                                                            className="text-left py-2.5 px-3 rounded-2xl text-[9px] font-black uppercase tracking-widest text-muted-foreground hover:text-primary hover:bg-primary/5 transition-all border border-transparent hover:border-primary/10"
-                                                        >
-                                                            {opt.label}
-                                                        </button>
-                                                    ))}
-                                                </div>
+                                                        className="flex-1 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest text-muted-foreground hover:text-primary hover:bg-primary/5 transition-all border border-transparent hover:border-primary/10"
+                                                    >
+                                                        {opt.label}
+                                                    </button>
+                                                ))}
                                             </div>
                                         </div>
 
@@ -480,7 +594,7 @@ ${subtasksText}`;
                                             <DialogTrigger asChild>
                                                 <Button
                                                     variant="ghost"
-                                                    className="h-16 rounded-none hover:bg-muted text-foreground sm:text-muted-foreground hover:text-foreground text-[11px] font-black uppercase tracking-[0.3em] border-r border-border transition-all active:scale-95"
+                                                    className="h-14 rounded-none hover:bg-muted text-foreground sm:text-muted-foreground hover:text-foreground text-[11px] font-black uppercase tracking-[0.2em] border-r border-border transition-all active:scale-95"
                                                 >
                                                     Back / Abort
                                                 </Button>
@@ -488,7 +602,7 @@ ${subtasksText}`;
                                             <DialogTrigger asChild>
                                                 <Button
                                                     variant="ghost"
-                                                    className="h-16 rounded-none hover:bg-primary/10 text-primary text-[11px] font-black uppercase tracking-[0.3em] shadow-[inset_0_0_30px_rgba(var(--primary),0.08)] transition-all active:scale-95"
+                                                    className="h-14 rounded-none hover:bg-primary/10 text-primary text-[11px] font-black uppercase tracking-[0.2em] shadow-[inset_0_0_30px_rgba(var(--primary),0.08)] transition-all active:scale-95"
                                                 >
                                                     Set Reminder
                                                 </Button>
@@ -627,7 +741,7 @@ ${subtasksText}`;
                             </div>
                         )}
 
-                        {/* Selected Tags Display — always visible chips */}
+                        {/* Selected Tags Display â€” always visible chips */}
                         {appMode === 'advanced' && task.tags && task.tags.length > 0 && (
                             <div className="flex flex-wrap gap-1.5 mt-1 px-0.5">
                                 {task.tags.map((tagName) => {
@@ -870,3 +984,4 @@ ${subtasksText}`;
         </>
     );
 }
+
