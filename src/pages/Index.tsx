@@ -123,6 +123,7 @@ const Index = () => {
     };
     const [activeView, setActiveView] = useState('my-day');
     const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+    const [newTaskInput, setNewTaskInput] = useState('');
     const [selectedLanguage, setSelectedLanguage] = useState('English');
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [isResetDialogOpen, setIsResetDialogOpen] = useState(false);
@@ -738,6 +739,13 @@ const Index = () => {
             ? format(selectedDate, 'MMM do')
             : "your day";
         toast.success(`Task added to ${dateStr}`);
+    };
+
+    const submitNewTask = async () => {
+        const value = newTaskInput.trim();
+        if (!value) return;
+        await addTask(value);
+        setNewTaskInput('');
     };
 
     const toggleTask = async (id: string) => {
@@ -1568,23 +1576,18 @@ const Index = () => {
                                 </div>
                                 <input
                                     id="task-input-field"
+                                    value={newTaskInput}
+                                    onChange={(e) => setNewTaskInput(e.target.value)}
                                     className="flex-1 bg-transparent border-none outline-none text-foreground text-base font-bold py-4 placeholder:text-zinc-600 tracking-tight"
                                     placeholder="TYPE YOUR MISSION..."
                                     onKeyDown={(e) => {
                                         if (e.key === 'Enter') {
-                                            addTask(e.currentTarget.value);
-                                            e.currentTarget.value = '';
+                                            void submitNewTask();
                                         }
                                     }}
                                 />
                                 <button
-                                    onClick={() => {
-                                        const input = document.getElementById('task-input-field') as HTMLInputElement;
-                                        if (input && input.value.trim()) {
-                                            addTask(input.value);
-                                            input.value = '';
-                                        }
-                                    }}
+                                    onClick={() => void submitNewTask()}
                                     className="mr-2 h-9 md:h-10 px-4 md:px-6 rounded-2xl bg-[#D4AF37] text-black text-[9px] md:text-[10px] font-black uppercase tracking-[0.2em] transition-all duration-300 hover:scale-[1.05] active:scale-95 shadow-[0_5px_15px_rgba(212,175,55,0.3)] hover:shadow-[0_8px_25px_rgba(212,175,55,0.5)] -ml-3 md:ml-0"
                                 >
                                     Enter

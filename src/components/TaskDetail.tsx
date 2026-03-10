@@ -75,8 +75,26 @@ export function TaskDetail({
     const [showEnhanceDialog, setShowEnhanceDialog] = useState(false);
     const [isEnhancing, setIsEnhancing] = useState(false);
     const [showShareModal, setShowShareModal] = useState(false);
+    const [titleDraft, setTitleDraft] = useState(task?.text || '');
     const [notesDraft, setNotesDraft] = useState(task?.notes || '');
     const [calendarMonth, setCalendarMonth] = useState<Date>(new Date());
+
+    useEffect(() => {
+        setTitleDraft(task?.text || '');
+    }, [task?.id, task?.text]);
+
+    useEffect(() => {
+        if (!task) return;
+        const nextValue = titleDraft;
+        const currentValue = task.text || '';
+        if (nextValue === currentValue) return;
+
+        const timer = setTimeout(() => {
+            onUpdate({ text: nextValue });
+        }, 180);
+
+        return () => clearTimeout(timer);
+    }, [titleDraft, task?.text, onUpdate]);
 
     useEffect(() => {
         setNotesDraft(task?.notes || '');
@@ -404,8 +422,8 @@ ${subtasksText}`;
                     {/* Title Section */}
                     <div className="space-y-4">
                         <textarea
-                            value={task.text}
-                            onChange={(e) => onUpdate({ text: e.target.value })}
+                            value={titleDraft}
+                            onChange={(e) => setTitleDraft(e.target.value)}
                             className="w-full bg-muted/20 hover:bg-muted/40 border-2 border-[#D4AF37]/30 focus:border-[#D4AF37] hover:border-[#D4AF37]/50 rounded-2xl p-4 text-2xl font-bold text-foreground focus:ring-0 resize-none leading-tight min-h-[80px] transition-all placeholder:text-muted-foreground/20 shadow-[0_4px_20px_rgba(0,0,0,0.3)] focus:shadow-[0_0_30px_rgba(212,175,55,0.1)]"
                             placeholder="What is this task about?"
                         />

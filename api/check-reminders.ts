@@ -33,7 +33,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // We fetch eligible reminders and perform robust date filtering in JS.
     const { data: candidateTasks, error } = await supabase
         .from('tasks')
-        .select('id, title, reminder, reminder_email, email_reminder_enabled, reminder_sent, user_id')
+        .select('id, title, reminder, reminder_email, email_reminder_enabled, reminder_sent, user_id, notes, priority, subtasks, category_id, categories(name)')
         .eq('email_reminder_enabled', true)
         .eq('reminder_sent', false)
         .not('reminder', 'is', null);
@@ -88,6 +88,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     taskTitle: task.title,
                     reminderTime: task.reminder,
                     taskId: task.id,
+                    notes: task.notes || undefined,
+                    priority: task.priority || undefined,
+                    subtasks: Array.isArray(task.subtasks) ? task.subtasks : [],
+                    category: task?.categories?.name || undefined,
                 }),
             });
 
