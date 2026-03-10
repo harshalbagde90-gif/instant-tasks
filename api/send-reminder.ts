@@ -32,7 +32,7 @@ function buildNotesSection(notes?: string) {
     const preview = compact.length > 240 ? `${compact.slice(0, 240)}...` : compact;
     return `
       <div style="margin:0 0 20px;">
-        <p style="margin:0 0 8px;font-size:11px;font-weight:800;letter-spacing:1.6px;text-transform:uppercase;color:#9ca3af;">Notes</p>
+        <p style="margin:0 0 8px;font-size:11px;font-weight:800;letter-spacing:1.6px;text-transform:uppercase;color:#9ca3af;">🗒️ Notes</p>
         <div style="background:#121212;border:1px solid #2a2a2a;border-radius:10px;padding:14px 16px;">
           <p style="margin:0;font-size:14px;line-height:1.55;color:#e5e7eb;">${escapeHtml(preview)}</p>
         </div>
@@ -64,7 +64,7 @@ function buildSubtasksSection(subtasks?: ReminderSubtask[]) {
 
     return `
       <div style="margin:0 0 20px;">
-        <p style="margin:0 0 8px;font-size:11px;font-weight:800;letter-spacing:1.6px;text-transform:uppercase;color:#9ca3af;">Subtasks (${completedCount}/${valid.length} completed)</p>
+        <p style="margin:0 0 8px;font-size:11px;font-weight:800;letter-spacing:1.6px;text-transform:uppercase;color:#9ca3af;">✅ Subtasks (${completedCount}/${valid.length} completed)</p>
         <div style="background:#121212;border:1px solid #2a2a2a;border-radius:10px;padding:14px 16px;">
           <ul style="margin:0;padding:0;list-style:none;">
             ${list}
@@ -125,6 +125,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const categoryValue = category?.trim() ? escapeHtml(category.trim()) : 'Uncategorized';
     const priorityValue = priority?.trim() ? escapeHtml(priority.trim()) : 'Normal';
+    const priorityTone = priorityValue.toLowerCase();
+    const isHighPriority = priorityTone === 'high' || priorityTone === 'urgent';
+    const priorityPrefix = isHighPriority ? '⚠️ ' : '';
 
     const notesSection = buildNotesSection(notes);
     const subtasksSection = buildSubtasksSection(subtasks);
@@ -145,22 +148,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               <tr>
                 <td style="background:linear-gradient(135deg,#facc15,#f59e0b);padding:28px 32px;text-align:center;">
                   <p style="margin:0;font-size:13px;font-weight:800;letter-spacing:3px;text-transform:uppercase;color:#111827;">TANGYTASK</p>
-                  <h1 style="margin:8px 0 0;font-size:22px;font-weight:900;color:#111827;letter-spacing:-0.5px;">Task Reminder</h1>
+                  <h1 style="margin:8px 0 0;font-size:22px;font-weight:900;color:#111827;letter-spacing:-0.5px;">⏰ Task Reminder</h1>
                 </td>
               </tr>
               <tr>
                 <td style="padding:28px;">
-                  <p style="margin:0 0 8px;font-size:11px;font-weight:800;letter-spacing:1.6px;text-transform:uppercase;color:#facc15;">Main Task</p>
+                  <p style="margin:0 0 8px;font-size:11px;font-weight:800;letter-spacing:1.6px;text-transform:uppercase;color:#facc15;">📝 Main Task</p>
                   <div style="background:#18181b;border:1px solid #facc1530;border-left:4px solid #facc15;border-radius:10px;padding:18px 20px;margin-bottom:18px;">
                     <p style="margin:0;font-size:18px;font-weight:700;color:#ffffff;line-height:1.5;">${escapeHtml(taskTitle)}</p>
                   </div>
 
-                  <p style="margin:0 0 8px;font-size:11px;font-weight:800;letter-spacing:1.6px;text-transform:uppercase;color:#9ca3af;">Scheduled For</p>
+                  <p style="margin:0 0 8px;font-size:11px;font-weight:800;letter-spacing:1.6px;text-transform:uppercase;color:#9ca3af;">🕒 Scheduled For</p>
                   <p style="margin:0 0 14px;font-size:15px;font-weight:700;color:#e5e7eb;">${escapeHtml(formattedTime)} IST</p>
 
                   <div style="display:flex;gap:8px;margin:0 0 18px;flex-wrap:wrap;">
                     <span style="display:inline-block;background:#171717;border:1px solid #2a2a2a;border-radius:999px;padding:6px 12px;font-size:12px;font-weight:700;color:#facc15;">Category: ${categoryValue}</span>
-                    <span style="display:inline-block;background:#171717;border:1px solid #2a2a2a;border-radius:999px;padding:6px 12px;font-size:12px;font-weight:700;color:#facc15;">Priority: ${priorityValue}</span>
+                    <span style="display:inline-block;background:#171717;border:1px solid #2a2a2a;border-radius:999px;padding:6px 12px;font-size:12px;font-weight:700;color:#facc15;">Priority: ${priorityPrefix}${priorityValue}</span>
                   </div>
 
                   ${notesSection}
@@ -186,7 +189,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const info = await transporter.sendMail({
             from: `"TangyTask" <${gmailUser}>`,
             to,
-            subject: `TangyTask • Reminder: ${taskTitle}`,
+            subject: `⏰ TangyTask Reminder | ${taskTitle}`,
             html: htmlBody,
         });
 
