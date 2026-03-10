@@ -54,9 +54,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(200).json({ dispatched: 0, message: 'No reminders due.' });
     }
 
-    const baseUrl = process.env.VERCEL_URL
-        ? `https://${process.env.VERCEL_URL}`
-        : 'https://tangytask.com';
+    // Always prefer the current request origin so internal API calls stay on the same host
+    // (e.g. custom domain) and avoid deployment/protection mismatches on *.vercel.app URLs.
+    const forwardedProtoHeader = req.headers['x-forwarded-proto'];
+    const forwardedHostHeader = req.headers['x-forwarded-host'];
+    const proto = typeof forwardedProtoHeader === 'string'
+        ? forwardedProtoHeader.split(',')[0].trim()
+        : 'https';
+    const host = typeof forwardedHostHeader === 'string'
+        ? forwardedHostHeader.split(',')[0].trim()
+        : req.headers.host;
+
+    const requestOrigin = host ? `${proto}://${host}` : null;
+    const fallbackOrigin = process.env.PUBLIC_APP_URL || 'https://tangytask.com';
+    const baseUrl = requestOrigin || fallbackOrigin;
 
     const results: { id: string; status: string }[] = [];
 
@@ -88,14 +99,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     .eq('id', task.id);
                 results.push({ id: task.id, status: 'sent' });
             } else {
-                const errBody = await sendRes.json().catch(() => ({}));
-                results.push({ id: task.id, status: `send-failed: ${(errBody as any).error}` });
+                const rawBody = await sendRes.text().catch(() => '');
+                let parsedBody: any = null;
+                try {
+                    parsedBody = rawBody ? JSON.parse(rawBody) : null;
+                } catch {
+                    parsedBody = null;
+                }
+
+                const reason =
+                    parsedBody?.error ||
+                    parsedBody?.message ||
+                    (rawBody ? rawBody.slice(0, 180) : '') ||
+                    `HTTP ${sendRes.status}`;
+
+                results.push({ id: task.id, status: `send-failed: ${sendRes.status} ${reason}` });
             }
         } catch (err: any) {
             results.push({ id: task.id, status: `error: ${err.message}` });
         }
     }
 
+    const sentCount = results.filter((r) => r.status === 'sent').length;
     console.log('Reminder dispatch results:', results);
-    return res.status(200).json({ dispatched: results.length, results });
+    return res.status(200).json({ dispatched: sentCount, processed: results.length, results });
 }
