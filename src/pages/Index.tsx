@@ -1778,6 +1778,7 @@ const Index = () => {
                 onToggle={toggleTask}
                 onUpdate={(updates) => selectedTask && updateTask(selectedTask.id, updates)}
                 appMode={appMode}
+                userEmail={user?.email}
                 categories={categories}
                 availableTags={availableTags}
                 onManage={(type) => {

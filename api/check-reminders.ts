@@ -27,18 +27,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const end   = new Date(now);
     const start = new Date(now.getTime() - 2 * 60 * 1000); // 2-min buffer
 
-    const { data: dueTasks, error } = await supabase
+    // NOTE:
+    // Some deployments may have `tasks.reminder` as TEXT instead of timestamptz.
+    // Filtering by gte/lt directly in SQL can fail in that case due to lexical comparison.
+    // We fetch eligible reminders and perform robust date filtering in JS.
+    const { data: candidateTasks, error } = await supabase
         .from('tasks')
         .select('id, title, reminder, reminder_email, email_reminder_enabled, reminder_sent, user_id')
         .eq('email_reminder_enabled', true)
         .eq('reminder_sent', false)
-        .gte('reminder', start.toISOString())
-        .lt('reminder', end.toISOString());
+        .not('reminder', 'is', null);
 
     if (error) {
         console.error('Supabase query error:', error);
         return res.status(500).json({ error: error.message });
     }
+
+    const dueTasks = (candidateTasks || []).filter((task) => {
+        if (!task.reminder) return false;
+        const parsed = new Date(task.reminder as string);
+        if (Number.isNaN(parsed.getTime())) return false;
+        return parsed >= start && parsed < end;
+    });
 
     if (!dueTasks || dueTasks.length === 0) {
         return res.status(200).json({ dispatched: 0, message: 'No reminders due.' });

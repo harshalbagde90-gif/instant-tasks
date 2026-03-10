@@ -58,6 +58,7 @@ interface TaskDetailProps {
     onToggle: (id: string) => void;
     onUpdate: (updates: Partial<Task>) => void;
     appMode?: 'basic' | 'advanced' | 'big-data';
+    userEmail?: string;
     categories: Category[];
     availableTags: TagType[];
     onManage: (type: 'categories' | 'tags') => void;
@@ -65,7 +66,7 @@ interface TaskDetailProps {
 
 export function TaskDetail({
     task, onClose, onDelete, onToggle, onUpdate, appMode = 'advanced',
-    categories, availableTags, onManage
+    userEmail, categories, availableTags, onManage
 }: TaskDetailProps) {
     const [subtaskInput, setSubtaskInput] = useState('');
     const [isUploading, setIsUploading] = useState(false);
@@ -135,6 +136,18 @@ export function TaskDetail({
     const reminderLabel = parsedReminder
         ? format(parsedReminder, 'MMM d, hh:mm a')
         : (task.reminder || 'Add Reminder');
+
+    const applyReminderUpdate = (nextIso?: string) => {
+        if (!nextIso) return;
+        const nextReminderEmail = task.reminderEmail || userEmail;
+
+        onUpdate({
+            reminder: nextIso,
+            reminderSent: false,
+            emailReminderEnabled: nextReminderEmail ? true : (task.emailReminderEnabled ?? false),
+            reminderEmail: nextReminderEmail || task.reminderEmail,
+        });
+    };
 
     const handleAddSubtask = () => {
         if (!subtaskInput.trim()) return;
@@ -480,7 +493,7 @@ ${subtasksText}`;
                                                                         reminderParts.minute,
                                                                         reminderParts.ampm
                                                                     );
-                                                                    if (nextIso) onUpdate({ reminder: nextIso, reminderSent: false });
+                                                                    applyReminderUpdate(nextIso);
                                                                 }}
                                                                 disabled={{ before: startOfToday() }}
                                                                 initialFocus
@@ -507,7 +520,7 @@ ${subtasksText}`;
                                                                     reminderParts.minute,
                                                                     reminderParts.ampm
                                                                 );
-                                                                if (nextIso) onUpdate({ reminder: nextIso, reminderSent: false });
+                                                                applyReminderUpdate(nextIso);
                                                             }}
                                                             className="h-10 bg-black/80 border border-yellow-500/30 rounded-xl px-2 text-center text-sm font-black text-yellow-400 focus:outline-none focus:border-yellow-400"
                                                         >
@@ -525,7 +538,7 @@ ${subtasksText}`;
                                                                     e.target.value,
                                                                     reminderParts.ampm
                                                                 );
-                                                                if (nextIso) onUpdate({ reminder: nextIso, reminderSent: false });
+                                                                applyReminderUpdate(nextIso);
                                                             }}
                                                             className="h-10 bg-black/80 border border-yellow-500/30 rounded-xl px-2 text-center text-sm font-black text-yellow-400 focus:outline-none focus:border-yellow-400"
                                                         >
@@ -545,7 +558,7 @@ ${subtasksText}`;
                                                                             reminderParts.minute,
                                                                             slot
                                                                         );
-                                                                        if (nextIso) onUpdate({ reminder: nextIso, reminderSent: false });
+                                                                        applyReminderUpdate(nextIso);
                                                                     }}
                                                                     className={cn(
                                                                         "h-[19px] min-w-[44px] px-2 rounded-md text-[10px] font-black border transition-all",
@@ -580,7 +593,7 @@ ${subtasksText}`;
                                                                 mm,
                                                                 meridian as 'AM' | 'PM'
                                                             );
-                                                            if (nextIso) onUpdate({ reminder: nextIso, reminderSent: false });
+                                                            applyReminderUpdate(nextIso);
                                                         }}
                                                         className="flex-1 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest text-muted-foreground hover:text-primary hover:bg-primary/5 transition-all border border-transparent hover:border-primary/10"
                                                     >
