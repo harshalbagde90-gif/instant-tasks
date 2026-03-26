@@ -21,6 +21,8 @@ import { cn } from '@/lib/utils';
 import * as supabaseSync from '@/lib/supabaseSync';
 import * as guestDataUtils from '@/lib/guestDataUtils';
 import * as LucideIcons from 'lucide-react';
+import { usePlan } from '@/hooks/usePlan';
+import UpgradePrompt from '@/components/UpgradePrompt';
 import { isToday, isTomorrow, isAfter, startOfToday, parseISO, addDays, format, startOfWeek, isSameDay, subDays } from 'date-fns';
 import { DayPicker } from 'react-day-picker';
 import 'react-day-picker/dist/style.css';
@@ -142,6 +144,8 @@ const Index = () => {
     const [profile, setProfile] = useState<any>(null);
     const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
     const [pendingMode, setPendingMode] = useState<'advanced' | 'big-data' | 'customize' | null>(null);
+    const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+    const [pendingMode, setPendingMode] = useState<'advanced' | 'big-data' | 'customize' | null>(null);
     const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
     const [isEditingName, setIsEditingName] = useState(false);
     const [newName, setNewName] = useState('');
@@ -150,6 +154,7 @@ const Index = () => {
     const [isGuestWarningOpen, setIsGuestWarningOpen] = useState(false);
     const [isMigrationOpen, setIsMigrationOpen] = useState(false);
     const [isMigrationComplete, setIsMigrationComplete] = useState(false);
+    const [upgradePrompt, setUpgradePrompt] = useState<{ open: boolean; title?: string; description?: string }>({ open: false });
 
     // 🔑 Guard: ensures cloud sync runs ONLY ONCE per app lifecycle
     // useRef because it persists across re-renders without causing them
@@ -158,6 +163,9 @@ const Index = () => {
     const lastTagsSynced = useRef('');
     const lastBigDataSynced = useRef('');
     const [cloudBootstrapComplete, setCloudBootstrapComplete] = useState(false);
+
+    // Plan-based feature gating
+    const planData = usePlan(profile);
 
     const [selectedDate, setSelectedDate] = useState<Date>(new Date());
     const [weekStartDate, setWeekStartDate] = useState<Date>(startOfWeek(new Date(), { weekStartsOn: 0 }));
@@ -610,7 +618,6 @@ const Index = () => {
         const hour = date.getHours();
         if (hour >= 5 && hour < 12) return 'Good Morning';
         if (hour >= 12 && hour < 17) return 'Good Afternoon';
-        if (hour >= 17 && hour < 22) return 'Good Evening';
         return 'Midnight Focus';
     };
 
@@ -712,6 +719,16 @@ const Index = () => {
             guestDataUtils.initializeGuestDataTimestamp();
             guestDataUtils.markGuestWarningAsShown();
             setIsGuestWarningOpen(true);
+        }
+
+        // ── Plan Gate: Task Limit ────────────────────────────────────
+        if (!planData.canAddTask(tasks.length)) {
+            setUpgradePrompt({
+                open: true,
+                title: '🚫 Task Limit Reached',
+                description: `Free plan allows up to 50 tasks. You have ${tasks.length} tasks. Upgrade to Pro for unlimited tasks.`,
+            });
+            return;
         }
 
         // Generate a real UUID on frontend to prevent cross-device duplicates
@@ -824,6 +841,16 @@ const Index = () => {
     };
 
     const handleAIAction = useCallback(async (id: string, action: AIAction | 'selection-ai' | 'big-data-temp', options?: any): Promise<string | string[]> => {
+        // ── Plan Gate: AI Actions ────────────────────────────────────
+        const aiUsed = profile?.ai_actions_used || 0;
+        if (!planData.canUseAI(aiUsed)) {
+            setUpgradePrompt({
+                open: true,
+                title: '🤖 AI Limit Reached',
+                description: `You've used ${aiUsed}/${planData.aiLimit} AI actions this month. Upgrade to Pro for 100 actions, or Power for unlimited.`,
+            });
+            throw new Error('AI limit reached');
+        }
         const stripTags = (t: string) => t.replace(/\[[\s\S]*?\]/g, '');
         const rawText = options?.text || tasks.find(t => t.id === id)?.text;
         const taskText = action === 'selection-ai' || action === 'big-data-temp' ? stripTags(rawText || "") : rawText;
@@ -1135,84 +1162,6 @@ const Index = () => {
             >
                 <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden hidden dark:block">
                     <video autoPlay loop muted playsInline className="w-full h-full object-cover">
-                        <source src="/Videos/Background Star.mp4" type="video/mp4" />
-                    </video>
-                    <div className="absolute inset-0 bg-black/60" />
-                </div>
-
-                <header className={cn("h-14 md:h-16 flex items-center justify-between border-b border-border bg-background/40 backdrop-blur-xl z-30 sticky top-0 transition-all duration-500", isSidebarOpen ? "px-3 md:px-6" : "px-4 md:px-10")}>
-                    <div className="absolute left-1/2 -translate-x-1/2 md:static md:translate-x-0 flex items-center gap-2 md:gap-3 z-50">
-                        <Popover open={isModePopoverOpen} onOpenChange={setIsModePopoverOpen}>
-                            <PopoverTrigger asChild>
-                                <div className="flex items-center gap-3 px-6 md:px-10 py-2 bg-zinc-900/90 backdrop-blur-xl border border-[#FACC15]/40 rounded-full shadow-[0_0_25px_rgba(250,204,21,0.2)] cursor-pointer group hover:border-[#FACC15] hover:shadow-[0_0_40px_rgba(250,204,21,0.4)] transition-all duration-500 relative overflow-hidden group/mode">
-                                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent translate-x-[-150%] group-hover:translate-x-[150%] transition-transform duration-1000" />
-                                    <LayoutGrid className="w-4 h-4 md:w-5 md:h-5 text-[#FACC15] group-hover:rotate-12 transition-all duration-300" />
-                                    <span className="text-[12px] md:text-base font-black text-[#FACC15] tracking-[0.05em] uppercase whitespace-nowrap drop-shadow-[0_0_12px_rgba(250,204,21,0.4)]">
-                                        <span className="opacity-40 mr-1.5 font-bold tracking-normal italic normal-case">mode:</span>
-                                        {appMode === 'basic' ? 'Basic' : appMode === 'advanced' ? 'Advanced' : appMode === 'customize' ? 'Customize' : 'Big Data'}
-                                    </span>
-                                    <div className="flex items-center gap-2 ml-1">
-                                        <div className="w-1.5 h-1.5 rounded-full bg-[#FACC15] animate-pulse shadow-[0_0_12px_#FACC15]" />
-                                        <ChevronDown className="w-4 h-4 md:w-5 md:h-5 text-zinc-500 group-hover:text-[#FACC15] transition-all" />
-                                    </div>
-                                </div>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-64 p-2 bg-card/95 backdrop-blur-xl border border-border shadow-2xl rounded-2xl z-50" align="start">
-                                <div className="space-y-1">
-                                    {[
-                                        { id: 'basic', Icon: Layout, label: 'Basic Mode', desc: 'Clean & Simple' },
-                                        { id: 'advanced', Icon: Layers, label: 'Advanced Mode', desc: 'Powerful Detail' },
-                                        { id: 'big-data', Icon: Database, label: 'Big Data Mode', desc: 'Maximum Insight' },
-                                        { id: 'customize', Icon: Settings, label: 'Customize Task', desc: 'Subtasks & Progress' }
-                                    ].map((mode) => (
-                                        <button
-                                            key={mode.id}
-                                            onClick={() => {
-                                                if (mode.id !== 'basic' && !user) {
-                                                    setPendingMode(mode.id as 'advanced' | 'big-data' | 'customize');
-                                                    setIsAuthModalOpen(true);
-                                                    setIsModePopoverOpen(false);
-                                                    toast.info("Login Required for " + mode.label);
-                                                    return;
-                                                }
-                                                setAppMode(mode.id as any);
-                                                setIsModePopoverOpen(false);
-                                            }}
-                                            className={cn("w-full flex items-center justify-between p-3 rounded-xl transition-all", appMode === mode.id ? "bg-primary/10 text-primary border border-primary/20" : "text-muted-foreground hover:bg-muted")}
-                                        >
-                                            <div className="flex items-center gap-3">
-                                                <div className={cn("p-2 rounded-lg", appMode === mode.id ? "bg-primary text-white" : "bg-muted text-muted-foreground")}>
-                                                    <mode.Icon className="w-4 h-4" />
-                                                </div>
-                                                <div className="text-left">
-                                                    <div className="text-xs font-black uppercase tracking-tight leading-none mb-1">{mode.label}</div>
-                                                    <div className="text-[9px] font-bold opacity-60 uppercase tracking-tighter">{mode.desc}</div>
-                                                </div>
-                                            </div>
-                                            {appMode === mode.id && <Check className="w-4 h-4 stroke-[3]" />}
-                                        </button>
-                                    ))}
-                                </div>
-                            </PopoverContent>
-                        </Popover>
-
-                        {/* Info Icon - Desktop Hover (Outside mode card) */}
-                        <Popover open={isUseCasePopoverOpen} onOpenChange={setIsUseCasePopoverOpen}>
-                            <PopoverTrigger asChild>
-                                <div className="hidden md:block">
-                                    <InfoIcon size={20} />
-                                </div>
-                            </PopoverTrigger>
-                            <PopoverContent
-                                className="p-0 border-0 bg-transparent shadow-none w-auto"
-                                align="start"
-                                side="bottom"
-                                sideOffset={8}
-                            >
-                                <UseCaseCard mode={appMode} />
-                            </PopoverContent>
-                        </Popover>
-
                         {/* Info Icon - Mobile Click (Outside mode card) */}
                         <div
                             className="md:hidden"
