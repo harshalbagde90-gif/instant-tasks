@@ -73,6 +73,7 @@ import {
     PopoverContent,
     PopoverTrigger,
 } from "@/components/ui/popover";
+import { useNavigate } from 'react-router-dom';
 
 
 const DEFAULT_CATEGORIES: Category[] = [
@@ -104,6 +105,7 @@ const DEFAULT_TAGS: TagType[] = [
 ];
 
 const Index = () => {
+    const navigate = useNavigate();
     const [basicTasks, setBasicTasks] = useLocalStorage<Task[]>('taskflow-tasks-basic', []);
     const [advancedTasks, setAdvancedTasks] = useLocalStorage<Task[]>('taskflow-tasks-advanced', []);
     const [customizeTasks, setCustomizeTasks] = useLocalStorage<Task[]>('taskflow-tasks-customize', []);
@@ -1320,6 +1322,14 @@ const Index = () => {
                     </div>
 
                     <div className="flex items-center gap-3">
+                        {currentPlan !== 'power' && (
+                            <Button
+                                onClick={() => navigate('/pricing')}
+                                className="h-9 rounded-full px-4 bg-primary text-black hover:bg-primary/90 font-black uppercase tracking-widest text-[10px] shadow-[0_0_20px_rgba(250,204,21,0.25)]"
+                            >
+                                {currentPlan === 'free' ? 'Upgrade' : 'Manage Plan'}
+                            </Button>
+                        )}
                         <div className="hidden md:flex items-center gap-3">
                             <LanguageSelector selectedLanguage={selectedLanguage} onLanguageChange={setSelectedLanguage} />
                             <ThemeToggle isNavbar />

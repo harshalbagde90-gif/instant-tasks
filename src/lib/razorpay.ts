@@ -148,6 +148,9 @@ export async function activateTrial(onSuccess: (plan: string) => void) {
         );
 
         const data = await res.json();
+        if (!res.ok) {
+            throw new Error(data.error || 'Trial activation failed');
+        }
         toast.dismiss();
 
         if (data.success) {
