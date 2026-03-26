@@ -16,32 +16,53 @@ export type Database = {
     Tables: {
       profiles: {
         Row: {
+          ai_actions_reset_at: string | null
+          ai_actions_used: number
           avatar_url: string | null
           dob: string | null
           full_name: string | null
           id: string
           onboarding_completed: boolean | null
+          plan: string
+          plan_expires_at: string | null
+          plan_started_at: string | null
           profession: string | null
+          razorpay_subscription_id: string | null
+          trial_ends_at: string | null
           updated_at: string | null
           whatsapp_number: string | null
         }
         Insert: {
+          ai_actions_reset_at?: string | null
+          ai_actions_used?: number
           avatar_url?: string | null
           dob?: string | null
           full_name?: string | null
           id: string
           onboarding_completed?: boolean | null
+          plan?: string
+          plan_expires_at?: string | null
+          plan_started_at?: string | null
           profession?: string | null
+          razorpay_subscription_id?: string | null
+          trial_ends_at?: string | null
           updated_at?: string | null
           whatsapp_number?: string | null
         }
         Update: {
+          ai_actions_reset_at?: string | null
+          ai_actions_used?: number
           avatar_url?: string | null
           dob?: string | null
           full_name?: string | null
           id?: string
           onboarding_completed?: boolean | null
+          plan?: string
+          plan_expires_at?: string | null
+          plan_started_at?: string | null
           profession?: string | null
+          razorpay_subscription_id?: string | null
+          trial_ends_at?: string | null
           updated_at?: string | null
           whatsapp_number?: string | null
         }

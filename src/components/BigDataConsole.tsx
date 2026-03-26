@@ -18,7 +18,17 @@ interface Sheet {
     };
 }
 
-const BigDataConsole = ({ handleAIAction, activeMode, setActiveMode }: { handleAIAction: any, activeMode: string, setActiveMode: (m: any) => void }) => {
+const BigDataConsole = ({
+    handleAIAction,
+    activeMode,
+    setActiveMode,
+    aiLimit,
+}: {
+    handleAIAction: any,
+    activeMode: string,
+    setActiveMode: (m: any) => void,
+    aiLimit: number | null,
+}) => {
     // Independent Workspaces: Store sheets by mode
     // Independent Workspaces: Store sheets by mode
     const [sheetsByMode, setSheetsByMode] = useState<Record<string, Sheet[]>>(() => {
@@ -138,7 +148,7 @@ const BigDataConsole = ({ handleAIAction, activeMode, setActiveMode }: { handleA
         const saved = localStorage.getItem('big-data-ai-usage');
         return saved ? parseInt(saved) : 0;
     });
-    const AI_LIMIT = 20;
+    const AI_LIMIT = aiLimit ?? Number.POSITIVE_INFINITY;
 
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const gutterRef = useRef<HTMLDivElement>(null);
@@ -333,8 +343,8 @@ const BigDataConsole = ({ handleAIAction, activeMode, setActiveMode }: { handleA
 
     const handleAIEdit = async (instruction: string) => {
         if (!selection || !textareaRef.current) return;
-        if (aiUsageCount >= AI_LIMIT) {
-            toast.error("AI Daily Limit Reached (20/20)");
+        if (Number.isFinite(AI_LIMIT) && aiUsageCount >= AI_LIMIT) {
+            toast.error(`AI Monthly Limit Reached (${aiUsageCount}/${AI_LIMIT})`);
             return;
         }
 
@@ -355,7 +365,7 @@ const BigDataConsole = ({ handleAIAction, activeMode, setActiveMode }: { handleA
                 setAiUsageCount(prev => prev + 1);
                 setSelection(null);
                 toast.dismiss();
-                toast.success(`AI Edit Applied (${aiUsageCount + 1}/${AI_LIMIT})`);
+                toast.success(`AI Edit Applied (${aiUsageCount + 1}/${Number.isFinite(AI_LIMIT) ? AI_LIMIT : 'Unlimited'})`);
             }
         } catch (e) {
             toast.dismiss();
@@ -827,10 +837,10 @@ const BigDataConsole = ({ handleAIAction, activeMode, setActiveMode }: { handleA
                         </div>
                         <div className={cn(
                             "flex items-center gap-1.5 md:gap-2 px-2.5 md:px-3 py-1 rounded-full border transition-all",
-                            aiUsageCount >= AI_LIMIT ? "bg-red-500/10 border-red-500/20 text-red-500" : "bg-white/5 border-white/10 text-zinc-500"
+                            Number.isFinite(AI_LIMIT) && aiUsageCount >= AI_LIMIT ? "bg-red-500/10 border-red-500/20 text-red-500" : "bg-white/5 border-white/10 text-zinc-500"
                         )}>
-                            <div className={cn("w-1 h-1 md:w-1.5 md:h-1.5 rounded-full", aiUsageCount >= AI_LIMIT ? "bg-red-500 animate-pulse" : "bg-primary")} />
-                            <span className="text-[8px] md:text-[9px] font-black uppercase tracking-widest">AI: {aiUsageCount}/{AI_LIMIT}</span>
+                            <div className={cn("w-1 h-1 md:w-1.5 md:h-1.5 rounded-full", Number.isFinite(AI_LIMIT) && aiUsageCount >= AI_LIMIT ? "bg-red-500 animate-pulse" : "bg-primary")} />
+                            <span className="text-[8px] md:text-[9px] font-black uppercase tracking-widest">AI: {aiUsageCount}/{Number.isFinite(AI_LIMIT) ? AI_LIMIT : 'UNL'}</span>
                         </div>
                     </div>
                 </div>

@@ -20,6 +20,7 @@ import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { cn } from '@/lib/utils';
 import * as supabaseSync from '@/lib/supabaseSync';
 import * as guestDataUtils from '@/lib/guestDataUtils';
+import { getAiUsageState, getEffectivePlan, getPlanConfig, isModeAllowed, type PlanTier } from '@/lib/plans';
 import * as LucideIcons from 'lucide-react';
 import { isToday, isTomorrow, isAfter, startOfToday, parseISO, addDays, format, startOfWeek, isSameDay, subDays } from 'date-fns';
 import { DayPicker } from 'react-day-picker';
@@ -140,6 +141,10 @@ const Index = () => {
     const [user, setUser] = useState<User | null>(null);
     const [isAuthBootstrapped, setIsAuthBootstrapped] = useState(false);
     const [profile, setProfile] = useState<any>(null);
+    const [guestAiUsage, setGuestAiUsage] = useLocalStorage<{ count: number; resetAt: string }>('guest-ai-usage', {
+        count: 0,
+        resetAt: new Date().toISOString(),
+    });
     const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
     const [pendingMode, setPendingMode] = useState<'advanced' | 'big-data' | 'customize' | null>(null);
     const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
@@ -167,6 +172,9 @@ const Index = () => {
         const saved = localStorage.getItem('big-data-workspaces');
         return saved ? JSON.parse(saved) : {};
     });
+    const currentPlan: PlanTier = getEffectivePlan(profile);
+    const planConfig = getPlanConfig(currentPlan);
+    const totalTaskCount = basicTasks.length + advancedTasks.length + customizeTasks.length;
 
     // Neural Sync: Monitoring Big Data workspace changes
     useEffect(() => {
@@ -185,11 +193,29 @@ const Index = () => {
     // Auto-activate pending mode after login
     useEffect(() => {
         if (user && pendingMode) {
-            setAppMode(pendingMode);
+            if (isModeAllowed(currentPlan, pendingMode)) {
+                setAppMode(pendingMode);
+                toast.success(`${pendingMode === 'advanced' ? 'Advanced' : pendingMode === 'customize' ? 'Customize' : 'Big Data'} Mode Activated!`);
+            } else {
+                toast.info(`Your ${currentPlan.toUpperCase()} plan does not include that mode.`);
+            }
             setPendingMode(null);
-            toast.success(`${pendingMode === 'advanced' ? 'Advanced' : 'Big Data'} Mode Activated!`);
         }
-    }, [user, pendingMode]);
+    }, [user, pendingMode, currentPlan, setAppMode]);
+
+    useEffect(() => {
+        if (!isModeAllowed(currentPlan, appMode)) {
+            setAppMode('basic');
+        }
+    }, [appMode, currentPlan, setAppMode]);
+
+    useEffect(() => {
+        const resetAt = new Date(guestAiUsage.resetAt);
+        const shouldReset = Number.isNaN(resetAt.getTime()) || Date.now() - resetAt.getTime() >= 30 * 24 * 60 * 60 * 1000;
+        if (shouldReset) {
+            setGuestAiUsage({ count: 0, resetAt: new Date().toISOString() });
+        }
+    }, [guestAiUsage.resetAt, setGuestAiUsage]);
 
     const handleTaskJump = (taskId: string) => {
         if (!user) {
@@ -200,7 +226,7 @@ const Index = () => {
         const task = tasks.find(t => t.id === taskId);
         if (!task) return;
 
-        setAppMode('advanced');
+        requestAppModeChange('advanced');
         setSelectedTaskId(taskId);
 
         if (task.dueDate) {
@@ -221,7 +247,7 @@ const Index = () => {
             return;
         }
 
-        setAppMode('big-data');
+        requestAppModeChange('big-data');
         setActiveMode(mode as any);
 
         // Update active sheet in localStorage for BigDataConsole
@@ -253,6 +279,54 @@ const Index = () => {
         } else if (error && user) {
             // If profile table fails, use auth metadata as fallback
             setNewName(user.user_metadata?.full_name || '');
+        }
+    };
+
+    const requestAppModeChange = (mode: 'basic' | 'advanced' | 'big-data' | 'customize') => {
+        if (mode !== 'basic' && !user) {
+            setPendingMode(mode);
+            setIsAuthModalOpen(true);
+            toast.info(`Login Required for ${mode === 'big-data' ? 'Big Data' : mode === 'customize' ? 'Customize' : 'Advanced'} Mode`);
+            return;
+        }
+
+        if (!isModeAllowed(currentPlan, mode)) {
+            const featureName = mode === 'big-data' ? 'Big Data Mode' : mode === 'customize' ? 'Customize Mode' : 'Advanced Mode';
+            toast.info(`${featureName} is available on Pro and Power plans.`);
+            return;
+        }
+
+        setAppMode(mode);
+    };
+
+    const consumeAiCredit = async () => {
+        if (!user) {
+            setGuestAiUsage(prev => ({
+                count: prev.count + 1,
+                resetAt: prev.resetAt || new Date().toISOString(),
+            }));
+            return;
+        }
+
+        const usage = getAiUsageState(profile);
+        const nextCount = usage.count + 1;
+
+        setProfile((prev: any) => ({
+            ...prev,
+            ai_actions_used: nextCount,
+            ai_actions_reset_at: usage.resetAt,
+        }));
+
+        const { error } = await supabase
+            .from('profiles')
+            .update({
+                ai_actions_used: nextCount,
+                ai_actions_reset_at: usage.resetAt,
+            })
+            .eq('id', user.id);
+
+        if (error) {
+            console.error('AI usage sync failed:', error);
         }
     };
 
@@ -707,6 +781,11 @@ const Index = () => {
     const addTask = async (text: string) => {
         if (!text.trim()) return;
 
+        if (totalTaskCount >= planConfig.taskLimit) {
+            toast.error(`Free plan allows up to ${planConfig.taskLimit} tasks. Upgrade to Pro for unlimited tasks.`);
+            return;
+        }
+
         // Guest user: Show warning on first task
         if (!user && !guestDataUtils.hasSeenGuestWarning()) {
             guestDataUtils.initializeGuestDataTimestamp();
@@ -781,6 +860,16 @@ const Index = () => {
     };
 
     const createCustomizeTask = async (task: Task) => {
+        if (!planConfig.canUseCustomizeMode) {
+            toast.error('Customize Mode is available on Pro and Power plans.');
+            return;
+        }
+
+        if (totalTaskCount >= planConfig.taskLimit) {
+            toast.error(`Free plan allows up to ${planConfig.taskLimit} tasks. Upgrade to Pro for unlimited tasks.`);
+            return;
+        }
+
         if (!user && !guestDataUtils.hasSeenGuestWarning()) {
             guestDataUtils.initializeGuestDataTimestamp();
             guestDataUtils.markGuestWarningAsShown();
@@ -827,8 +916,12 @@ const Index = () => {
         const stripTags = (t: string) => t.replace(/\[[\s\S]*?\]/g, '');
         const rawText = options?.text || tasks.find(t => t.id === id)?.text;
         const taskText = action === 'selection-ai' || action === 'big-data-temp' ? stripTags(rawText || "") : rawText;
+        const currentAiUsage = user ? getAiUsageState(profile).count : guestAiUsage.count;
 
         if (!taskText && action !== 'big-data-temp') throw new Error('Task not found');
+        if (planConfig.aiLimit !== null && currentAiUsage >= planConfig.aiLimit) {
+            throw new Error(`You've used ${currentAiUsage}/${planConfig.aiLimit} AI actions this month. Upgrade your plan for more.`);
+        }
 
         const localRepair = (text: string, lang: string) => {
             let res = text;
@@ -920,13 +1013,17 @@ const Index = () => {
                 updateTask(id, { text: result as string, previousText: tasks.find(t => t.id === id)?.text });
             }
 
+            if ((typeof result === 'string' && result && result !== "__NO_CHANGE__") || (Array.isArray(result) && result.length > 0)) {
+                await consumeAiCredit();
+            }
+
             return result;
         } catch (err: any) {
             console.error("AI Error:", err);
             toast.error(`AI Failed: ${err.message}`);
             return taskText;
         }
-    }, [tasks, selectedLanguage]);
+    }, [tasks, selectedLanguage, user, profile, guestAiUsage.count, planConfig.aiLimit]);
 
     const updateTask = async (id: string, updates: Partial<Task>) => {
         const taskToUpdate = tasks.find(t => t.id === id);
@@ -1098,7 +1195,7 @@ const Index = () => {
                 isOpen={isSidebarOpen}
                 setIsOpen={setIsSidebarOpen}
                 appMode={appMode}
-                setAppMode={setAppMode}
+                setAppMode={requestAppModeChange}
                 onLanguageChange={setSelectedLanguage}
                 selectedLanguage={selectedLanguage}
                 onAuthClick={() => setIsAuthModalOpen(true)}
@@ -1175,7 +1272,7 @@ const Index = () => {
                                                     toast.info("Login Required for " + mode.label);
                                                     return;
                                                 }
-                                                setAppMode(mode.id as any);
+                                                requestAppModeChange(mode.id as any);
                                                 setIsModePopoverOpen(false);
                                             }}
                                             className={cn("w-full flex items-center justify-between p-3 rounded-xl transition-all", appMode === mode.id ? "bg-primary/10 text-primary border border-primary/20" : "text-muted-foreground hover:bg-muted")}
@@ -1755,7 +1852,7 @@ const Index = () => {
                             </section>
                         )}
 
-                        {appMode === 'big-data' && <BigDataConsole handleAIAction={handleAIAction} activeMode={activeMode} setActiveMode={setActiveMode} />}
+                        {appMode === 'big-data' && <BigDataConsole handleAIAction={handleAIAction} activeMode={activeMode} setActiveMode={setActiveMode} aiLimit={planConfig.aiLimit} />}
 
                         {appMode === 'customize' && (
                             <CustomizeTaskView
